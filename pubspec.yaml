@@ -1,0 +1,37 @@
+name: kcal_log
+description: "卡路里日记 — 本地优先的每日食物热量记录（iOS / Android / macOS / Windows）"
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  # 本地数据库（SQLite），无任何后端
+  drift: ^2.23.0
+  drift_flutter: ^0.2.0
+  path_provider: ^2.1.5
+  # 状态管理
+  flutter_riverpod: ^2.6.1
+  # Open Food Facts 只读查询（可选联网）
+  http: ^1.2.2
+  # 设置项（单位/主题/饮水目标）
+  shared_preferences: ^2.3.4
+  # 数据导出 / 导入
+  file_picker: ^8.1.7
+  intl: ^0.20.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  drift_dev: ^2.23.0
+  build_runner: ^2.4.14
+
+flutter:
+  uses-material-design: true
