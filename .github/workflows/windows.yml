@@ -33,7 +33,7 @@ jobs:
         run: |
           $src = "build/windows/x64/runner/Release"
           Copy-Item -Recurse $src -Destination kcal_log
-          Compress-Archive -Path kcal_log -DestinationPath kcal_log-windows.zip --Force
+          Compress-Archive -Path kcal_log -DestinationPath kcal_log-windows.zip -Force
           Get-Item kcal_log-windows.zip | Select-Object Name, Length
 
       # tag 构建产物 → 挂到同名 Release（--clobber 覆盖旧资产）
