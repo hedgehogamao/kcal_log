@@ -15,6 +15,7 @@ dependencies:
   # 本地数据库（SQLite），无任何后端
   drift: ^2.23.0
   drift_flutter: ^0.2.0
+  sqlite3_flutter_libs: ^0.5.24 # 给 drift 捆绑各平台原生 SQLite（Windows/Linux 必需）
   path_provider: ^2.1.5
   # 状态管理
   flutter_riverpod: ^2.6.1
