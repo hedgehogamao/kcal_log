@@ -1,7 +1,7 @@
 name: kcal_log
 description: "卡路里日记 — 本地优先的每日食物热量记录（iOS / Android / macOS / Windows）"
 publish_to: 'none'
-version: 0.1.0+1
+version: 0.1.1+2
 
 environment:
   sdk: ^3.13.0
