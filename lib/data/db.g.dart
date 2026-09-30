@@ -61,6 +61,18 @@ class $FoodsTable extends Foods with TableInfo<$FoodsTable, Food> {
     requiredDuringInsert: false,
     defaultValue: const Constant('custom'),
   );
+  static const VerificationMeta _categoryMeta = const VerificationMeta(
+    'category',
+  );
+  @override
+  late final GeneratedColumn<String> category = GeneratedColumn<String>(
+    'category',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('other'),
+  );
   static const VerificationMeta _kcal100Meta = const VerificationMeta(
     'kcal100',
   );
@@ -162,6 +174,7 @@ class $FoodsTable extends Foods with TableInfo<$FoodsTable, Food> {
     brand,
     barcode,
     source,
+    category,
     kcal100,
     protein100,
     fat100,
@@ -210,6 +223,12 @@ class $FoodsTable extends Foods with TableInfo<$FoodsTable, Food> {
       context.handle(
         _sourceMeta,
         source.isAcceptableOrUnknown(data['source']!, _sourceMeta),
+      );
+    }
+    if (data.containsKey('category')) {
+      context.handle(
+        _categoryMeta,
+        category.isAcceptableOrUnknown(data['category']!, _categoryMeta),
       );
     }
     if (data.containsKey('kcal100')) {
@@ -297,6 +316,10 @@ class $FoodsTable extends Foods with TableInfo<$FoodsTable, Food> {
         DriftSqlType.string,
         data['${effectivePrefix}source'],
       )!,
+      category: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}category'],
+      )!,
       kcal100: attachedDatabase.typeMapping.read(
         DriftSqlType.double,
         data['${effectivePrefix}kcal100'],
@@ -344,6 +367,7 @@ class Food extends DataClass implements Insertable<Food> {
   final String? brand;
   final String? barcode;
   final String source;
+  final String category;
   final double kcal100;
   final double protein100;
   final double fat100;
@@ -358,6 +382,7 @@ class Food extends DataClass implements Insertable<Food> {
     this.brand,
     this.barcode,
     required this.source,
+    required this.category,
     required this.kcal100,
     required this.protein100,
     required this.fat100,
@@ -379,6 +404,7 @@ class Food extends DataClass implements Insertable<Food> {
       map['barcode'] = Variable<String>(barcode);
     }
     map['source'] = Variable<String>(source);
+    map['category'] = Variable<String>(category);
     map['kcal100'] = Variable<double>(kcal100);
     map['protein100'] = Variable<double>(protein100);
     map['fat100'] = Variable<double>(fat100);
@@ -405,6 +431,7 @@ class Food extends DataClass implements Insertable<Food> {
           ? const Value.absent()
           : Value(barcode),
       source: Value(source),
+      category: Value(category),
       kcal100: Value(kcal100),
       protein100: Value(protein100),
       fat100: Value(fat100),
@@ -431,6 +458,7 @@ class Food extends DataClass implements Insertable<Food> {
       brand: serializer.fromJson<String?>(json['brand']),
       barcode: serializer.fromJson<String?>(json['barcode']),
       source: serializer.fromJson<String>(json['source']),
+      category: serializer.fromJson<String>(json['category']),
       kcal100: serializer.fromJson<double>(json['kcal100']),
       protein100: serializer.fromJson<double>(json['protein100']),
       fat100: serializer.fromJson<double>(json['fat100']),
@@ -450,6 +478,7 @@ class Food extends DataClass implements Insertable<Food> {
       'brand': serializer.toJson<String?>(brand),
       'barcode': serializer.toJson<String?>(barcode),
       'source': serializer.toJson<String>(source),
+      'category': serializer.toJson<String>(category),
       'kcal100': serializer.toJson<double>(kcal100),
       'protein100': serializer.toJson<double>(protein100),
       'fat100': serializer.toJson<double>(fat100),
@@ -467,6 +496,7 @@ class Food extends DataClass implements Insertable<Food> {
     Value<String?> brand = const Value.absent(),
     Value<String?> barcode = const Value.absent(),
     String? source,
+    String? category,
     double? kcal100,
     double? protein100,
     double? fat100,
@@ -481,6 +511,7 @@ class Food extends DataClass implements Insertable<Food> {
     brand: brand.present ? brand.value : this.brand,
     barcode: barcode.present ? barcode.value : this.barcode,
     source: source ?? this.source,
+    category: category ?? this.category,
     kcal100: kcal100 ?? this.kcal100,
     protein100: protein100 ?? this.protein100,
     fat100: fat100 ?? this.fat100,
@@ -497,6 +528,7 @@ class Food extends DataClass implements Insertable<Food> {
       brand: data.brand.present ? data.brand.value : this.brand,
       barcode: data.barcode.present ? data.barcode.value : this.barcode,
       source: data.source.present ? data.source.value : this.source,
+      category: data.category.present ? data.category.value : this.category,
       kcal100: data.kcal100.present ? data.kcal100.value : this.kcal100,
       protein100: data.protein100.present
           ? data.protein100.value
@@ -522,6 +554,7 @@ class Food extends DataClass implements Insertable<Food> {
           ..write('brand: $brand, ')
           ..write('barcode: $barcode, ')
           ..write('source: $source, ')
+          ..write('category: $category, ')
           ..write('kcal100: $kcal100, ')
           ..write('protein100: $protein100, ')
           ..write('fat100: $fat100, ')
@@ -541,6 +574,7 @@ class Food extends DataClass implements Insertable<Food> {
     brand,
     barcode,
     source,
+    category,
     kcal100,
     protein100,
     fat100,
@@ -559,6 +593,7 @@ class Food extends DataClass implements Insertable<Food> {
           other.brand == this.brand &&
           other.barcode == this.barcode &&
           other.source == this.source &&
+          other.category == this.category &&
           other.kcal100 == this.kcal100 &&
           other.protein100 == this.protein100 &&
           other.fat100 == this.fat100 &&
@@ -575,6 +610,7 @@ class FoodsCompanion extends UpdateCompanion<Food> {
   final Value<String?> brand;
   final Value<String?> barcode;
   final Value<String> source;
+  final Value<String> category;
   final Value<double> kcal100;
   final Value<double> protein100;
   final Value<double> fat100;
@@ -589,6 +625,7 @@ class FoodsCompanion extends UpdateCompanion<Food> {
     this.brand = const Value.absent(),
     this.barcode = const Value.absent(),
     this.source = const Value.absent(),
+    this.category = const Value.absent(),
     this.kcal100 = const Value.absent(),
     this.protein100 = const Value.absent(),
     this.fat100 = const Value.absent(),
@@ -604,6 +641,7 @@ class FoodsCompanion extends UpdateCompanion<Food> {
     this.brand = const Value.absent(),
     this.barcode = const Value.absent(),
     this.source = const Value.absent(),
+    this.category = const Value.absent(),
     required double kcal100,
     this.protein100 = const Value.absent(),
     this.fat100 = const Value.absent(),
@@ -620,6 +658,7 @@ class FoodsCompanion extends UpdateCompanion<Food> {
     Expression<String>? brand,
     Expression<String>? barcode,
     Expression<String>? source,
+    Expression<String>? category,
     Expression<double>? kcal100,
     Expression<double>? protein100,
     Expression<double>? fat100,
@@ -635,6 +674,7 @@ class FoodsCompanion extends UpdateCompanion<Food> {
       if (brand != null) 'brand': brand,
       if (barcode != null) 'barcode': barcode,
       if (source != null) 'source': source,
+      if (category != null) 'category': category,
       if (kcal100 != null) 'kcal100': kcal100,
       if (protein100 != null) 'protein100': protein100,
       if (fat100 != null) 'fat100': fat100,
@@ -652,6 +692,7 @@ class FoodsCompanion extends UpdateCompanion<Food> {
     Value<String?>? brand,
     Value<String?>? barcode,
     Value<String>? source,
+    Value<String>? category,
     Value<double>? kcal100,
     Value<double>? protein100,
     Value<double>? fat100,
@@ -667,6 +708,7 @@ class FoodsCompanion extends UpdateCompanion<Food> {
       brand: brand ?? this.brand,
       barcode: barcode ?? this.barcode,
       source: source ?? this.source,
+      category: category ?? this.category,
       kcal100: kcal100 ?? this.kcal100,
       protein100: protein100 ?? this.protein100,
       fat100: fat100 ?? this.fat100,
@@ -695,6 +737,9 @@ class FoodsCompanion extends UpdateCompanion<Food> {
     }
     if (source.present) {
       map['source'] = Variable<String>(source.value);
+    }
+    if (category.present) {
+      map['category'] = Variable<String>(category.value);
     }
     if (kcal100.present) {
       map['kcal100'] = Variable<double>(kcal100.value);
@@ -731,6 +776,7 @@ class FoodsCompanion extends UpdateCompanion<Food> {
           ..write('brand: $brand, ')
           ..write('barcode: $barcode, ')
           ..write('source: $source, ')
+          ..write('category: $category, ')
           ..write('kcal100: $kcal100, ')
           ..write('protein100: $protein100, ')
           ..write('fat100: $fat100, ')
@@ -2902,6 +2948,7 @@ typedef $$FoodsTableCreateCompanionBuilder =
       Value<String?> brand,
       Value<String?> barcode,
       Value<String> source,
+      Value<String> category,
       required double kcal100,
       Value<double> protein100,
       Value<double> fat100,
@@ -2918,6 +2965,7 @@ typedef $$FoodsTableUpdateCompanionBuilder =
       Value<String?> brand,
       Value<String?> barcode,
       Value<String> source,
+      Value<String> category,
       Value<double> kcal100,
       Value<double> protein100,
       Value<double> fat100,
@@ -2958,6 +3006,11 @@ class $$FoodsTableFilterComposer extends Composer<_$AppDatabase, $FoodsTable> {
 
   ColumnFilters<String> get source => $composableBuilder(
     column: $table.source,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get category => $composableBuilder(
+    column: $table.category,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3036,6 +3089,11 @@ class $$FoodsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get category => $composableBuilder(
+    column: $table.category,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<double> get kcal100 => $composableBuilder(
     column: $table.kcal100,
     builder: (column) => ColumnOrderings(column),
@@ -3101,6 +3159,9 @@ class $$FoodsTableAnnotationComposer
   GeneratedColumn<String> get source =>
       $composableBuilder(column: $table.source, builder: (column) => column);
 
+  GeneratedColumn<String> get category =>
+      $composableBuilder(column: $table.category, builder: (column) => column);
+
   GeneratedColumn<double> get kcal100 =>
       $composableBuilder(column: $table.kcal100, builder: (column) => column);
 
@@ -3165,6 +3226,7 @@ class $$FoodsTableTableManager
                 Value<String?> brand = const Value.absent(),
                 Value<String?> barcode = const Value.absent(),
                 Value<String> source = const Value.absent(),
+                Value<String> category = const Value.absent(),
                 Value<double> kcal100 = const Value.absent(),
                 Value<double> protein100 = const Value.absent(),
                 Value<double> fat100 = const Value.absent(),
@@ -3179,6 +3241,7 @@ class $$FoodsTableTableManager
                 brand: brand,
                 barcode: barcode,
                 source: source,
+                category: category,
                 kcal100: kcal100,
                 protein100: protein100,
                 fat100: fat100,
@@ -3195,6 +3258,7 @@ class $$FoodsTableTableManager
                 Value<String?> brand = const Value.absent(),
                 Value<String?> barcode = const Value.absent(),
                 Value<String> source = const Value.absent(),
+                Value<String> category = const Value.absent(),
                 required double kcal100,
                 Value<double> protein100 = const Value.absent(),
                 Value<double> fat100 = const Value.absent(),
@@ -3209,6 +3273,7 @@ class $$FoodsTableTableManager
                 brand: brand,
                 barcode: barcode,
                 source: source,
+                category: category,
                 kcal100: kcal100,
                 protein100: protein100,
                 fat100: fat100,

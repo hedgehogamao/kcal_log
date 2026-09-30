@@ -31,16 +31,45 @@ class BottomActionBar extends StatelessWidget {
             top: false,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-              child: Row(
-                children: [
-                  if (leading != null) ...[leading!, const SizedBox(width: 8)],
-                  Expanded(child: info),
-                  const SizedBox(width: 12),
-                  FilledButton(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final stack =
+                      constraints.maxWidth < 348 ||
+                      MediaQuery.textScalerOf(context).scale(14) > 21;
+                  final action = FilledButton(
                     onPressed: onAction,
                     child: Text(actionLabel),
-                  ),
-                ],
+                  );
+                  if (stack) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        info,
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            if (leading != null) ...[
+                              leading!,
+                              const SizedBox(width: 8),
+                            ],
+                            Expanded(child: action),
+                          ],
+                        ),
+                      ],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      if (leading != null) ...[
+                        leading!,
+                        const SizedBox(width: 8),
+                      ],
+                      Expanded(child: info),
+                      const SizedBox(width: 12),
+                      Flexible(child: action),
+                    ],
+                  );
+                },
               ),
             ),
           ),

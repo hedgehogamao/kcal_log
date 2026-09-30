@@ -46,3 +46,10 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Generated local verification evidence is not application source.
+# Keep an empty output directory so a fresh checkout can run widget tests.
+/verification/*
+!/verification/redesign_20260929/
+/verification/redesign_20260929/*
+!/verification/redesign_20260929/.gitkeep

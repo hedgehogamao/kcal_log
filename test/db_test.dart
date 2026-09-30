@@ -11,28 +11,33 @@ void main() {
   setUp(() => db = AppDatabase.forTesting(NativeDatabase.memory()));
   tearDown(() => db.close());
 
-  Future<Food> addRice() => db.upsertFood(FoodsCompanion.insert(
-        name: '米饭',
-        kcal100: 116,
-        protein100: const Value(2.6),
-        fat100: const Value(0.3),
-        carb100: const Value(25.9),
-      ));
+  Future<Food> addRice() => db.upsertFood(
+    FoodsCompanion.insert(
+      name: '米饭',
+      kcal100: 116,
+      category: const Value('staple'),
+      protein100: const Value(2.6),
+      fat100: const Value(0.3),
+      carb100: const Value(25.9),
+    ),
+  );
 
   test('food + entry roundtrip', () async {
     final rice = await addRice();
     final today = dateKey(DateTime.now());
-    await db.addEntry(EntriesCompanion.insert(
-      date: today,
-      meal: MealType.lunch,
-      name: rice.name,
-      foodId: Value(rice.id),
-      grams: const Value(200),
-      kcal: 232,
-      protein: const Value(5.2),
-      fat: const Value(0.6),
-      carb: const Value(51.8),
-    ));
+    await db.addEntry(
+      EntriesCompanion.insert(
+        date: today,
+        meal: MealType.lunch,
+        name: rice.name,
+        foodId: Value(rice.id),
+        grams: const Value(200),
+        kcal: 232,
+        protein: const Value(5.2),
+        fat: const Value(0.6),
+        carb: const Value(51.8),
+      ),
+    );
 
     final entries = await db.watchEntries(today).first;
     expect(entries, hasLength(1));
@@ -41,14 +46,40 @@ void main() {
     expect(entries.first.foodId, rice.id);
   });
 
+  test(
+    'updating an earlier food returns that food, not the latest insert',
+    () async {
+      final first = await db.upsertFood(
+        FoodsCompanion.insert(
+          name: '收藏米饭',
+          kcal100: 116,
+          source: const Value('builtin'),
+          favorite: const Value(true),
+        ),
+      );
+      await db.upsertFood(FoodsCompanion.insert(name: '后来插入的食物', kcal100: 50));
+      final updated = await db.upsertFood(
+        FoodsCompanion.insert(id: Value(first.id), name: '收藏米饭', kcal100: 120),
+      );
+      expect(updated.id, first.id);
+      expect(updated.name, '收藏米饭');
+      expect(updated.kcal100, 120);
+      expect(updated.source, 'builtin');
+      expect(updated.favorite, isTrue);
+      expect(await db.foodCount(), 2);
+    },
+  );
+
   test('quick add stores kcal-only entry', () async {
     final today = dateKey(DateTime.now());
-    await db.addEntry(EntriesCompanion.insert(
-      date: today,
-      meal: MealType.snack,
-      name: '快速添加',
-      kcal: 150,
-    ));
+    await db.addEntry(
+      EntriesCompanion.insert(
+        date: today,
+        meal: MealType.snack,
+        name: '快速添加',
+        kcal: 150,
+      ),
+    );
     final entries = await db.watchEntries(today).first;
     expect(entries.first.foodId, isNull);
     expect(entries.first.grams, isNull);
@@ -58,14 +89,16 @@ void main() {
   test('deleting a food keeps entry snapshots', () async {
     final rice = await addRice();
     final today = dateKey(DateTime.now());
-    await db.addEntry(EntriesCompanion.insert(
-      date: today,
-      meal: MealType.dinner,
-      name: rice.name,
-      foodId: Value(rice.id),
-      grams: const Value(100),
-      kcal: 116,
-    ));
+    await db.addEntry(
+      EntriesCompanion.insert(
+        date: today,
+        meal: MealType.dinner,
+        name: rice.name,
+        foodId: Value(rice.id),
+        grams: const Value(100),
+        kcal: 116,
+      ),
+    );
     await db.deleteFood(rice.id);
 
     expect(await db.foodCount(), 0);
@@ -78,15 +111,17 @@ void main() {
 
   test('template save and apply', () async {
     final rice = await addRice();
-    final egg = await db.upsertFood(FoodsCompanion.insert(
-      name: '鸡蛋',
-      kcal100: 144,
-    ));
+    final egg = await db.upsertFood(
+      FoodsCompanion.insert(name: '鸡蛋', kcal100: 144),
+    );
     final id = await db.saveTemplate('早餐套餐', [(rice.id, 200), (egg.id, 100)]);
 
     final today = dateKey(DateTime.now());
-    final count =
-        await db.addEntriesFromTemplate(id, today, MealType.breakfast);
+    final count = await db.addEntriesFromTemplate(
+      id,
+      today,
+      MealType.breakfast,
+    );
     expect(count, 2);
 
     final entries = await db.watchEntries(today).first;
@@ -119,30 +154,36 @@ void main() {
   test('export → import roundtrip into fresh db', () async {
     final rice = await addRice();
     final today = dateKey(DateTime.now());
-    await db.addEntry(EntriesCompanion.insert(
-      date: today,
-      meal: MealType.lunch,
-      name: rice.name,
-      foodId: Value(rice.id),
-      grams: const Value(200),
-      kcal: 232,
-    ));
+    await db.addEntry(
+      EntriesCompanion.insert(
+        date: today,
+        meal: MealType.lunch,
+        name: rice.name,
+        foodId: Value(rice.id),
+        grams: const Value(200),
+        kcal: 232,
+      ),
+    );
     await db.addWater(today, 300);
     await db.addWeight(today, 70.2);
-    await db.saveProfile(ProfilesCompanion(
-      id: const Value(1),
-      kcalGoal: const Value(2000),
-      sex: const Value(Sex.male),
-    ));
+    await db.saveProfile(
+      ProfilesCompanion(
+        id: const Value(1),
+        kcalGoal: const Value(2000),
+        sex: const Value(Sex.male),
+      ),
+    );
     final templateId = await db.saveTemplate('套餐', [(rice.id, 100)]);
 
     final json = await db.exportJson();
 
-    final db2 = AppDatabase.forTesting(NativeDatabase.memory());
-    addTearDown(db2.close);
+    await db.close();
+    db = AppDatabase.forTesting(NativeDatabase.memory());
+    final db2 = db;
     await db2.importJson(json);
 
     expect(await db2.foodCount(), 1);
+    expect((await db2.select(db2.foods).get()).single.category, 'staple');
     final entries = await db2.watchEntries(today).first;
     expect(entries, hasLength(1));
     expect(entries.first.foodId, rice.id);
@@ -151,8 +192,11 @@ void main() {
     final profile = await db2.watchProfile().first;
     expect(profile!.kcalGoal, 2000);
     expect(profile.sex, Sex.male);
-    final applied =
-        await db2.addEntriesFromTemplate(templateId, today, MealType.dinner);
+    final applied = await db2.addEntriesFromTemplate(
+      templateId,
+      today,
+      MealType.dinner,
+    );
     expect(applied, 1);
   });
 

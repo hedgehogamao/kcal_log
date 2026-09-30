@@ -1,6 +1,8 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
+import '../logic/food_search.dart';
+
 part 'db.g.dart';
 
 enum MealType { breakfast, lunch, dinner, snack }
@@ -17,6 +19,8 @@ class Foods extends Table {
   TextColumn get barcode => text().nullable().unique()();
   // custom / off / builtin
   TextColumn get source => text().withDefault(const Constant('custom'))();
+  // stable category code; existing databases default to 'other' on migration.
+  TextColumn get category => text().withDefault(const Constant('other'))();
   RealColumn get kcal100 => real()();
   RealColumn get protein100 => real().withDefault(const Constant(0))();
   RealColumn get fat100 => real().withDefault(const Constant(0))();
@@ -50,8 +54,9 @@ class Profiles extends Table {
   IntColumn get birthYear => integer().nullable()();
   RealColumn get heightCm => real().nullable()();
   RealColumn get weightKg => real().nullable()();
-  IntColumn get activity => intEnum<ActivityLevel>()
-      .withDefault(Constant(ActivityLevel.moderate.index))();
+  IntColumn get activity => intEnum<ActivityLevel>().withDefault(
+    Constant(ActivityLevel.moderate.index),
+  )();
   RealColumn get kcalGoal => real().nullable()();
   RealColumn get proteinGoal => real().nullable()();
   RealColumn get fatGoal => real().nullable()();
@@ -88,8 +93,8 @@ class Templates extends Table {
 @DataClassName('TemplateItem')
 class TemplateItems extends Table {
   IntColumn get id => integer().autoIncrement()();
-  IntColumn get templateId => integer().references(Templates, #id,
-      onDelete: KeyAction.cascade)();
+  IntColumn get templateId =>
+      integer().references(Templates, #id, onDelete: KeyAction.cascade)();
   IntColumn get foodId => integer().references(Foods, #id)();
   RealColumn get grams => real()();
 }
@@ -103,24 +108,45 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+    onUpgrade: (m, from, to) async {
+      if (from < 2) {
+        await m.addColumn(foods, foods.category);
+        // Distinguish legacy missing metadata from an explicit "Other" choice.
+        await customStatement(
+          "UPDATE foods SET category = 'legacy' WHERE source = 'builtin'",
+        );
+      }
+    },
+  );
 
   // ---------- entries ----------
   Stream<List<FoodEntry>> watchEntries(String date) =>
       (select(entries)..where((e) => e.date.equals(date))).watch();
 
   Stream<List<FoodEntry>> watchEntriesBetween(String from, String to) =>
-      (select(entries)..where((e) =>
-              e.date.isBiggerOrEqualValue(from) & e.date.isSmallerOrEqualValue(to)))
+      (select(entries)..where(
+            (e) =>
+                e.date.isBiggerOrEqualValue(from) &
+                e.date.isSmallerOrEqualValue(to),
+          ))
           .watch();
 
   Future<List<FoodEntry>> entriesBetween(String from, String to) =>
-      (select(entries)..where((e) =>
-              e.date.isBiggerOrEqualValue(from) & e.date.isSmallerOrEqualValue(to)))
+      (select(entries)..where(
+            (e) =>
+                e.date.isBiggerOrEqualValue(from) &
+                e.date.isSmallerOrEqualValue(to),
+          ))
           .get();
 
   Future<List<FoodEntry>> recentEntries({int limit = 120}) =>
-      (select(entries)..orderBy([(e) => OrderingTerm.desc(e.createdAt)])..limit(limit))
+      (select(entries)
+            ..orderBy([(e) => OrderingTerm.desc(e.createdAt)])
+            ..limit(limit))
           .get();
 
   Future<void> addEntry(EntriesCompanion c) => into(entries).insert(c);
@@ -133,23 +159,52 @@ class AppDatabase extends _$AppDatabase {
   // ---------- foods ----------
   Stream<List<Food>> watchFoods(String query, {bool favoritesOnly = false}) {
     final q = select(foods);
-    final text = query.trim();
-    if (text.isNotEmpty) q.where((f) => f.name.like('%$text%'));
     if (favoritesOnly) q.where((f) => f.favorite.equals(true));
-    q.orderBy([
-      (f) => OrderingTerm.desc(f.favorite),
-      (f) => OrderingTerm.desc(f.id),
-    ]);
-    return q.watch();
+    return q.watch().map((rows) => _rankFoods(rows, query));
   }
 
-  Future<List<Food>> searchFoods(String query, {int limit = 30}) {
-    final q = select(foods);
-    final text = query.trim();
-    if (text.isNotEmpty) q.where((f) => f.name.like('%$text%'));
-    q.orderBy([(f) => OrderingTerm.desc(f.favorite), (f) => OrderingTerm.desc(f.id)]);
-    q.limit(limit);
-    return q.get();
+  Future<List<Food>> searchFoods(String query, {int limit = 30}) async {
+    if (limit <= 0) return [];
+    final rows = await select(foods).get();
+    return _rankFoods(rows, query).take(limit).toList();
+  }
+
+  List<Food> _rankFoods(List<Food> rows, String query) {
+    final searching = query.trim().isNotEmpty;
+    final matches = <(Food, int)>[];
+    for (final food in rows) {
+      final rank = foodMatchRank(
+        name: food.name,
+        brand: food.brand,
+        barcode: food.barcode,
+        category: food.category,
+        query: query,
+      );
+      if (rank != null) matches.add((food, rank));
+    }
+    int group(Food food) => food.favorite
+        ? 0
+        : food.source == 'custom'
+        ? 1
+        : food.source == 'builtin'
+        ? 2
+        : 3;
+    matches.sort((a, b) {
+      if (searching) {
+        final byRank = a.$2.compareTo(b.$2);
+        if (byRank != 0) return byRank;
+      }
+      final byGroup = group(a.$1).compareTo(group(b.$1));
+      if (byGroup != 0) return byGroup;
+      if (searching) {
+        final byLength = a.$1.name.length.compareTo(b.$1.name.length);
+        if (byLength != 0) return byLength;
+      }
+      return a.$1.source == 'builtin'
+          ? a.$1.id.compareTo(b.$1.id)
+          : b.$1.id.compareTo(a.$1.id);
+    });
+    return [for (final (food, _) in matches) food];
   }
 
   Future<Food?> foodByBarcode(String code) =>
@@ -158,7 +213,9 @@ class AppDatabase extends _$AppDatabase {
   Future<int> foodCount() => foods.count().getSingle();
 
   Future<Food> upsertFood(FoodsCompanion c) async {
-    final id = await into(foods).insertOnConflictUpdate(c);
+    final insertedId = await into(foods).insertOnConflictUpdate(c);
+    // SQLite's last insert id can belong to an unrelated row after an update.
+    final id = c.id.present ? c.id.value : insertedId;
     return (select(foods)..where((f) => f.id.equals(id))).getSingle();
   }
 
@@ -166,12 +223,13 @@ class AppDatabase extends _$AppDatabase {
       update(foods).replace(f.copyWith(favorite: !f.favorite));
 
   Future<void> deleteFood(int id) => transaction(() async {
-        // 记录里已固化营养快照，只解除关联，不删记录
-        await (update(entries)..where((e) => e.foodId.equals(id)))
-            .write(const EntriesCompanion(foodId: Value(null)));
-        await (delete(templateItems)..where((t) => t.foodId.equals(id))).go();
-        await (delete(foods)..where((f) => f.id.equals(id))).go();
-      });
+    // 记录里已固化营养快照，只解除关联，不删记录
+    await (update(entries)..where((e) => e.foodId.equals(id))).write(
+      const EntriesCompanion(foodId: Value(null)),
+    );
+    await (delete(templateItems)..where((t) => t.foodId.equals(id))).go();
+    await (delete(foods)..where((f) => f.id.equals(id))).go();
+  });
 
   // ---------- profile ----------
   Stream<Profile?> watchProfile() =>
@@ -182,22 +240,28 @@ class AppDatabase extends _$AppDatabase {
 
   // ---------- weights ----------
   Stream<List<WeightRec>> watchWeights({int limit = 90}) =>
-      (select(weights)..orderBy([(w) => OrderingTerm.desc(w.date)])..limit(limit))
+      (select(weights)
+            ..orderBy([(w) => OrderingTerm.desc(w.date)])
+            ..limit(limit))
           .watch();
 
   Future<void> addWeight(String date, double kg) =>
-      into(weights).insertOnConflictUpdate(WeightsCompanion.insert(date: date, kg: kg));
+      into(weights)
+          .insertOnConflictUpdate(WeightsCompanion.insert(date: date, kg: kg));
 
   // ---------- waters ----------
   Stream<WaterRec?> watchWater(String date) =>
       (select(waters)..where((w) => w.date.equals(date))).watchSingleOrNull();
 
   Future<void> addWater(String date, int deltaMl) async {
-    final row = await (select(waters)..where((w) => w.date.equals(date))).getSingleOrNull();
+    final row = await (select(
+      waters,
+    )..where((w) => w.date.equals(date))).getSingleOrNull();
     final current = row?.ml ?? 0;
     final next = (current + deltaMl).clamp(0, 20000);
     await into(waters).insertOnConflictUpdate(
-        WatersCompanion.insert(date: date, ml: Value(next)));
+      WatersCompanion.insert(date: date, ml: Value(next)),
+    );
   }
 
   // ---------- templates ----------
@@ -205,8 +269,9 @@ class AppDatabase extends _$AppDatabase {
 
   Future<List<MealTemplate>> allTemplates() => select(templates).get();
 
-  Future<List<TemplateItem>> itemsOf(int templateId) =>
-      (select(templateItems)..where((t) => t.templateId.equals(templateId))).get();
+  Future<List<TemplateItem>> itemsOf(int templateId) => (select(
+    templateItems,
+  )..where((t) => t.templateId.equals(templateId))).get();
 
   Future<List<Food>> foodsByIds(List<int> ids) {
     if (ids.isEmpty) return Future.value([]);
@@ -215,57 +280,113 @@ class AppDatabase extends _$AppDatabase {
 
   Future<int> saveTemplate(String name, List<(int, double)> items) =>
       transaction(() async {
-        final id = await into(templates).insert(TemplatesCompanion.insert(name: name));
+        if (name.trim().isEmpty) {
+          throw ArgumentError('Template name is required');
+        }
+        await _validateTemplateItems(items);
+        final id = await into(templates)
+            .insert(TemplatesCompanion.insert(name: name));
         for (final (foodId, grams) in items) {
-          await into(templateItems).insert(TemplateItemsCompanion.insert(
-              templateId: id, foodId: foodId, grams: grams));
+          await into(templateItems).insert(
+            TemplateItemsCompanion.insert(
+              templateId: id,
+              foodId: foodId,
+              grams: grams,
+            ),
+          );
         }
         return id;
       });
 
-  Future<void> updateTemplate(int id, String name, List<(int, double)> items) =>
-      transaction(() async {
-        await (update(templates)..where((t) => t.id.equals(id)))
-            .write(TemplatesCompanion(name: Value(name)));
-        await (delete(templateItems)..where((t) => t.templateId.equals(id))).go();
-        for (final (foodId, grams) in items) {
-          await into(templateItems).insert(TemplateItemsCompanion.insert(
-              templateId: id, foodId: foodId, grams: grams));
-        }
-      });
+  Future<void> updateTemplate(
+    int id,
+    String name,
+    List<(int, double)> items,
+  ) => transaction(() async {
+    if (name.trim().isEmpty) throw ArgumentError('Template name is required');
+    await _validateTemplateItems(items);
+    if (await (select(
+          templates,
+        )..where((t) => t.id.equals(id))).getSingleOrNull() ==
+        null) {
+      throw StateError('Template no longer exists');
+    }
+    await (update(templates)..where((t) => t.id.equals(id))).write(
+      TemplatesCompanion(name: Value(name)),
+    );
+    await (delete(templateItems)..where((t) => t.templateId.equals(id))).go();
+    for (final (foodId, grams) in items) {
+      await into(templateItems).insert(
+        TemplateItemsCompanion.insert(
+          templateId: id,
+          foodId: foodId,
+          grams: grams,
+        ),
+      );
+    }
+  });
 
-  Future<void> deleteTemplate(int id) async {
+  Future<void> deleteTemplate(int id) => transaction(() async {
     await (delete(templateItems)..where((t) => t.templateId.equals(id))).go();
     await (delete(templates)..where((t) => t.id.equals(id))).go();
+  });
+
+  Future<void> _validateTemplateItems(List<(int, double)> items) async {
+    if (items.isEmpty ||
+        items.any(
+          (item) => !item.$2.isFinite || item.$2 <= 0 || item.$2 > 100000,
+        )) {
+      throw ArgumentError('Template needs finite positive grams up to 100000');
+    }
+    final found = await foodsByIds(items.map((item) => item.$1).toList());
+    if (items.any((item) => !found.any((food) => food.id == item.$1))) {
+      throw StateError('A template food no longer exists');
+    }
+    for (final food in found) {
+      if ([
+        food.kcal100,
+        food.protein100,
+        food.fat100,
+        food.carb100,
+      ].any((value) => !value.isFinite || value < 0)) {
+        throw StateError('A template food has invalid nutrition');
+      }
+    }
   }
 
   /// 把组合餐按当前日期与餐次写入饮食记录，返回写入条数
-  Future<int> addEntriesFromTemplate(int templateId, String date, MealType meal) =>
-      transaction(() async {
-        final items = await itemsOf(templateId);
-        if (items.isEmpty) return 0;
-        final foods =
-            await foodsByIds(items.map((i) => i.foodId).toList());
-        final byId = {for (final f in foods) f.id: f};
-        var count = 0;
-        for (final it in items) {
-          final f = byId[it.foodId];
-          if (f == null || it.grams <= 0) continue;
-          await addEntry(EntriesCompanion.insert(
-            date: date,
-            meal: meal,
-            name: f.name,
-            foodId: Value(f.id),
-            grams: Value(it.grams),
-            kcal: f.kcal100 * it.grams / 100,
-            protein: Value(f.protein100 * it.grams / 100),
-            fat: Value(f.fat100 * it.grams / 100),
-            carb: Value(f.carb100 * it.grams / 100),
-          ));
-          count++;
-        }
-        return count;
-      });
+  Future<int> addEntriesFromTemplate(
+    int templateId,
+    String date,
+    MealType meal,
+  ) => transaction(() async {
+    final items = await itemsOf(templateId);
+    await _validateTemplateItems([
+      for (final item in items) (item.foodId, item.grams),
+    ]);
+    final foods = await foodsByIds(items.map((i) => i.foodId).toList());
+    final byId = {for (final f in foods) f.id: f};
+    var count = 0;
+    for (final it in items) {
+      final f = byId[it.foodId];
+      if (f == null) throw StateError('A template food no longer exists');
+      await addEntry(
+        EntriesCompanion.insert(
+          date: date,
+          meal: meal,
+          name: f.name,
+          foodId: Value(f.id),
+          grams: Value(it.grams),
+          kcal: f.kcal100 * it.grams / 100,
+          protein: Value(f.protein100 * it.grams / 100),
+          fat: Value(f.fat100 * it.grams / 100),
+          carb: Value(f.carb100 * it.grams / 100),
+        ),
+      );
+      count++;
+    }
+    return count;
+  });
 
   // ---------- export / import ----------
   Future<Map<String, dynamic>> exportJson() async {
@@ -273,70 +394,105 @@ class AppDatabase extends _$AppDatabase {
       'schema': 1,
       'exportedAt': DateTime.now().toIso8601String(),
       'app': 'kcal_log',
-      'profile': (await (select(profiles)..where((p) => p.id.equals(1))).getSingleOrNull())
-          ?.let(_profileMap),
+      'profile': (await (select(
+        profiles,
+      )..where((p) => p.id.equals(1))).getSingleOrNull())?.let(_profileMap),
       'foods': (await select(foods).get()).map(_foodMap).toList(),
       'entries': (await select(entries).get()).map(_entryMap).toList(),
-      'weights': (await select(weights).get()).map((w) => {'date': w.date, 'kg': w.kg}).toList(),
-      'waters': (await select(waters).get()).map((w) => {'date': w.date, 'ml': w.ml}).toList(),
-      'templates': (await select(templates).get())
-          .map((t) => {'id': t.id, 'name': t.name})
-          .toList(),
+      'weights': (await select(
+        weights,
+      ).get()).map((w) => {'date': w.date, 'kg': w.kg}).toList(),
+      'waters': (await select(
+        waters,
+      ).get()).map((w) => {'date': w.date, 'ml': w.ml}).toList(),
+      'templates': (await select(
+        templates,
+      ).get()).map((t) => {'id': t.id, 'name': t.name}).toList(),
       'templateItems': (await select(templateItems).get())
-          .map((t) => {'id': t.id, 'templateId': t.templateId, 'foodId': t.foodId, 'grams': t.grams})
+          .map(
+            (t) => {
+              'id': t.id,
+              'templateId': t.templateId,
+              'foodId': t.foodId,
+              'grams': t.grams,
+            },
+          )
           .toList(),
     };
   }
 
   Future<void> importJson(Map<String, dynamic> json) => transaction(() async {
-        await delete(entries).go();
-        await delete(templateItems).go();
-        await delete(templates).go();
-        await delete(waters).go();
-        await delete(weights).go();
-        await delete(foods).go();
-        await delete(profiles).go();
+    await delete(entries).go();
+    await delete(templateItems).go();
+    await delete(templates).go();
+    await delete(waters).go();
+    await delete(weights).go();
+    await delete(foods).go();
+    await delete(profiles).go();
 
-        final p = json['profile'] as Map<String, dynamic>?;
-        if (p != null) await into(profiles).insert(_profileFromMap(p));
-        await batch((b) {
-          b.insertAll(
-              foods,
-              (json['foods'] as List).map((m) => _foodFromMap(m as Map<String, dynamic>)).toList());
-          b.insertAll(
-              entries,
-              (json['entries'] as List)
-                  .map((m) => _entryFromMap(m as Map<String, dynamic>))
-                  .toList());
-          b.insertAll(
-              weights,
-              (json['weights'] as List)
-                  .map((m) => WeightsCompanion.insert(
-                      date: m['date'] as String, kg: _d(m['kg']) ?? 0))
-                  .toList());
-          b.insertAll(
-              waters,
-              (json['waters'] as List)
-                  .map((m) => WatersCompanion.insert(
-                      date: m['date'] as String, ml: Value((m['ml'] as num?)?.toInt() ?? 0)))
-                  .toList());
-          b.insertAll(
-              templates,
-              (json['templates'] as List)
-                  .map((m) => TemplatesCompanion.insert(
-                      id: Value((m['id'] as num).toInt()), name: m['name'] as String))
-                  .toList());
-          b.insertAll(
-              templateItems,
-              (json['templateItems'] as List)
-                  .map((m) => TemplateItemsCompanion.insert(
-                      id: Value((m['id'] as num).toInt()),
-                      templateId: (m['templateId'] as num).toInt(),
-                      foodId: (m['foodId'] as num).toInt(),
-                      grams: _d(m['grams']) ?? 0))
-                  .toList());
-        });
-      });
+    final p = json['profile'] as Map<String, dynamic>?;
+    if (p != null) await into(profiles).insert(_profileFromMap(p));
+    await batch((b) {
+      b.insertAll(
+        foods,
+        (json['foods'] as List)
+            .map((m) => _foodFromMap(m as Map<String, dynamic>))
+            .toList(),
+      );
+      b.insertAll(
+        entries,
+        (json['entries'] as List)
+            .map((m) => _entryFromMap(m as Map<String, dynamic>))
+            .toList(),
+      );
+      b.insertAll(
+        weights,
+        (json['weights'] as List)
+            .map(
+              (m) => WeightsCompanion.insert(
+                date: m['date'] as String,
+                kg: _d(m['kg']) ?? 0,
+              ),
+            )
+            .toList(),
+      );
+      b.insertAll(
+        waters,
+        (json['waters'] as List)
+            .map(
+              (m) => WatersCompanion.insert(
+                date: m['date'] as String,
+                ml: Value((m['ml'] as num?)?.toInt() ?? 0),
+              ),
+            )
+            .toList(),
+      );
+      b.insertAll(
+        templates,
+        (json['templates'] as List)
+            .map(
+              (m) => TemplatesCompanion.insert(
+                id: Value((m['id'] as num).toInt()),
+                name: m['name'] as String,
+              ),
+            )
+            .toList(),
+      );
+      b.insertAll(
+        templateItems,
+        (json['templateItems'] as List)
+            .map(
+              (m) => TemplateItemsCompanion.insert(
+                id: Value((m['id'] as num).toInt()),
+                templateId: (m['templateId'] as num).toInt(),
+                foodId: (m['foodId'] as num).toInt(),
+                grams: _d(m['grams']) ?? 0,
+              ),
+            )
+            .toList(),
+      );
+    });
+  });
 }
 
 // ---------- JSON 映射 ----------
@@ -344,95 +500,105 @@ class AppDatabase extends _$AppDatabase {
 double? _d(dynamic v) => (v as num?)?.toDouble();
 
 Map<String, dynamic> _foodMap(Food f) => {
-      'id': f.id,
-      'name': f.name,
-      'brand': f.brand,
-      'barcode': f.barcode,
-      'source': f.source,
-      'kcal100': f.kcal100,
-      'protein100': f.protein100,
-      'fat100': f.fat100,
-      'carb100': f.carb100,
-      'servingDesc': f.servingDesc,
-      'servingGrams': f.servingGrams,
-      'favorite': f.favorite,
-      'createdAt': f.createdAt.toIso8601String(),
-    };
+  'id': f.id,
+  'name': f.name,
+  'brand': f.brand,
+  'barcode': f.barcode,
+  'source': f.source,
+  'category': f.category,
+  'kcal100': f.kcal100,
+  'protein100': f.protein100,
+  'fat100': f.fat100,
+  'carb100': f.carb100,
+  'servingDesc': f.servingDesc,
+  'servingGrams': f.servingGrams,
+  'favorite': f.favorite,
+  'createdAt': f.createdAt.toIso8601String(),
+};
 
 Food _foodFromMap(Map<String, dynamic> m) => Food(
-      id: (m['id'] as num).toInt(),
-      name: m['name'] as String,
-      brand: m['brand'] as String?,
-      barcode: m['barcode'] as String?,
-      source: (m['source'] as String?) ?? 'custom',
-      kcal100: _d(m['kcal100']) ?? 0,
-      protein100: _d(m['protein100']) ?? 0,
-      fat100: _d(m['fat100']) ?? 0,
-      carb100: _d(m['carb100']) ?? 0,
-      servingDesc: m['servingDesc'] as String?,
-      servingGrams: _d(m['servingGrams']),
-      favorite: (m['favorite'] as bool?) ?? false,
-      createdAt: DateTime.tryParse(m['createdAt'] as String? ?? '') ?? DateTime.now(),
-    );
+  id: (m['id'] as num).toInt(),
+  name: m['name'] as String,
+  brand: m['brand'] as String?,
+  barcode: m['barcode'] as String?,
+  source: (m['source'] as String?) ?? 'custom',
+  category:
+      (m['category'] as String?) ??
+      (m['source'] == 'builtin' ? 'legacy' : 'other'),
+  kcal100: _d(m['kcal100']) ?? 0,
+  protein100: _d(m['protein100']) ?? 0,
+  fat100: _d(m['fat100']) ?? 0,
+  carb100: _d(m['carb100']) ?? 0,
+  servingDesc: m['servingDesc'] as String?,
+  servingGrams: _d(m['servingGrams']),
+  favorite: (m['favorite'] as bool?) ?? false,
+  createdAt:
+      DateTime.tryParse(m['createdAt'] as String? ?? '') ?? DateTime.now(),
+);
 
 Map<String, dynamic> _entryMap(FoodEntry e) => {
-      'id': e.id,
-      'date': e.date,
-      'meal': e.meal.index,
-      'foodId': e.foodId,
-      'name': e.name,
-      'grams': e.grams,
-      'kcal': e.kcal,
-      'protein': e.protein,
-      'fat': e.fat,
-      'carb': e.carb,
-      'createdAt': e.createdAt.toIso8601String(),
-    };
+  'id': e.id,
+  'date': e.date,
+  'meal': e.meal.index,
+  'foodId': e.foodId,
+  'name': e.name,
+  'grams': e.grams,
+  'kcal': e.kcal,
+  'protein': e.protein,
+  'fat': e.fat,
+  'carb': e.carb,
+  'createdAt': e.createdAt.toIso8601String(),
+};
 
 FoodEntry _entryFromMap(Map<String, dynamic> m) => FoodEntry(
-      id: (m['id'] as num).toInt(),
-      date: m['date'] as String,
-      meal: MealType.values[((m['meal'] as num?)?.toInt() ?? 0)
-          .clamp(0, MealType.values.length - 1)],
-      foodId: (m['foodId'] as num?)?.toInt(),
-      name: m['name'] as String,
-      grams: _d(m['grams']),
-      kcal: _d(m['kcal']) ?? 0,
-      protein: _d(m['protein']) ?? 0,
-      fat: _d(m['fat']) ?? 0,
-      carb: _d(m['carb']) ?? 0,
-      createdAt: DateTime.tryParse(m['createdAt'] as String? ?? '') ?? DateTime.now(),
-    );
+  id: (m['id'] as num).toInt(),
+  date: m['date'] as String,
+  meal:
+      MealType.values[((m['meal'] as num?)?.toInt() ?? 0).clamp(
+        0,
+        MealType.values.length - 1,
+      )],
+  foodId: (m['foodId'] as num?)?.toInt(),
+  name: m['name'] as String,
+  grams: _d(m['grams']),
+  kcal: _d(m['kcal']) ?? 0,
+  protein: _d(m['protein']) ?? 0,
+  fat: _d(m['fat']) ?? 0,
+  carb: _d(m['carb']) ?? 0,
+  createdAt:
+      DateTime.tryParse(m['createdAt'] as String? ?? '') ?? DateTime.now(),
+);
 
 Map<String, dynamic> _profileMap(Profile p) => {
-      'id': p.id,
-      'sex': p.sex?.index,
-      'birthYear': p.birthYear,
-      'heightCm': p.heightCm,
-      'weightKg': p.weightKg,
-      'activity': p.activity.index,
-      'kcalGoal': p.kcalGoal,
-      'proteinGoal': p.proteinGoal,
-      'fatGoal': p.fatGoal,
-      'carbGoal': p.carbGoal,
-    };
+  'id': p.id,
+  'sex': p.sex?.index,
+  'birthYear': p.birthYear,
+  'heightCm': p.heightCm,
+  'weightKg': p.weightKg,
+  'activity': p.activity.index,
+  'kcalGoal': p.kcalGoal,
+  'proteinGoal': p.proteinGoal,
+  'fatGoal': p.fatGoal,
+  'carbGoal': p.carbGoal,
+};
 
 Profile _profileFromMap(Map<String, dynamic> m) => Profile(
-      id: 1,
-      sex: (m['sex'] as num?) == null
-          ? null
-          : Sex.values[((m['sex'] as num).toInt()).clamp(0, Sex.values.length - 1)],
-      birthYear: (m['birthYear'] as num?)?.toInt(),
-      heightCm: _d(m['heightCm']),
-      weightKg: _d(m['weightKg']),
-      activity: ActivityLevel
-          .values[((m['activity'] as num?)?.toInt() ?? ActivityLevel.moderate.index)
-              .clamp(0, ActivityLevel.values.length - 1)],
-      kcalGoal: _d(m['kcalGoal']),
-      proteinGoal: _d(m['proteinGoal']),
-      fatGoal: _d(m['fatGoal']),
-      carbGoal: _d(m['carbGoal']),
-    );
+  id: 1,
+  sex: (m['sex'] as num?) == null
+      ? null
+      : Sex.values[((m['sex'] as num).toInt()).clamp(0, Sex.values.length - 1)],
+  birthYear: (m['birthYear'] as num?)?.toInt(),
+  heightCm: _d(m['heightCm']),
+  weightKg: _d(m['weightKg']),
+  activity:
+      ActivityLevel.values[((m['activity'] as num?)?.toInt() ??
+              ActivityLevel.moderate.index)
+          .clamp(0, ActivityLevel.values.length - 1)],
+  kcalGoal: _d(m['kcalGoal']),
+  proteinGoal: _d(m['proteinGoal']),
+  fatGoal: _d(m['fatGoal']),
+  carbGoal: _d(m['carbGoal']),
+);
 
 extension _Let<T> on T {
   R let<R>(R Function(T) f) => f(this);
@@ -440,9 +606,9 @@ extension _Let<T> on T {
 
 extension MealLabel on MealType {
   String get label => switch (this) {
-        MealType.breakfast => '早餐',
-        MealType.lunch => '午餐',
-        MealType.dinner => '晚餐',
-        MealType.snack => '加餐',
-      };
+    MealType.breakfast => '早餐',
+    MealType.lunch => '午餐',
+    MealType.dinner => '晚餐',
+    MealType.snack => '加餐',
+  };
 }

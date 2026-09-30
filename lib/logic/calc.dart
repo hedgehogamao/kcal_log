@@ -12,7 +12,20 @@ double? estimateTdee({
   double? weightKg,
   ActivityLevel activity = ActivityLevel.moderate,
 }) {
-  if (birthYear == null || heightCm == null || weightKg == null) return null;
+  if (sex == null ||
+      birthYear == null ||
+      heightCm == null ||
+      weightKg == null) {
+    return null;
+  }
+  if (!heightCm.isFinite ||
+      !weightKg.isFinite ||
+      heightCm <= 0 ||
+      heightCm > 300 ||
+      weightKg <= 0 ||
+      weightKg > 500) {
+    return null;
+  }
   final age = DateTime.now().year - birthYear;
   if (age < 10 || age > 100) return null;
   final base = sex == Sex.female
@@ -24,11 +37,14 @@ double? estimateTdee({
     ActivityLevel.moderate: 1.55,
     ActivityLevel.high: 1.725,
   };
-  return base * factors[activity]!;
+  final result = base * factors[activity]!;
+  return result.isFinite && result > 0 ? result : null;
 }
 
 /// 默认宏量目标：蛋白质 20% / 脂肪 25% / 碳水 55%
-(double proteinG, double fatG, double carbG) defaultMacroGoals(double kcalGoal) {
+(double proteinG, double fatG, double carbG) defaultMacroGoals(
+  double kcalGoal,
+) {
   const pPct = 0.20, fPct = 0.25, cPct = 0.55;
   return (
     kcalGoal * pPct / 4, // 蛋白质 4 kcal/g
@@ -46,7 +62,9 @@ int streakDays(Iterable<String> dateKeys, String todayKey) {
   final dates = dateKeys.toSet();
   if (dates.isEmpty) return 0;
   var cursor = DateTime.parse(todayKey);
-  if (!dates.contains(_key(cursor))) cursor = cursor.subtract(const Duration(days: 1));
+  if (!dates.contains(_key(cursor))) {
+    cursor = cursor.subtract(const Duration(days: 1));
+  }
   var streak = 0;
   while (dates.contains(_key(cursor))) {
     streak++;

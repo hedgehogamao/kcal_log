@@ -1,7 +1,8 @@
-import 'package:drift/drift.dart' show Value;
+import 'package:drift/drift.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'db.dart';
+import '../logic/food_category.dart';
 
 /// 内置常见食物种子数据（每 100 g；数值为常见估算值，用户可随时编辑）
 class SeedFood {
@@ -276,6 +277,31 @@ final List<SeedFood> kSeedFoods = [
   _s('三明治(鸡蛋)', 220, 9.0, 9.0, 26.0, servingDesc: '1份', servingGrams: 180),
 ];
 
+// These boundary names mirror the contiguous sections above. Keeping category
+// metadata separate leaves all 237 nutritional records unchanged.
+const _categoryStarts = <String, FoodCategory>{
+  '米饭': FoodCategory.staple,
+  '鸡蛋': FoodCategory.protein,
+  '西兰花': FoodCategory.vegetable,
+  '苹果': FoodCategory.fruit,
+  '牛奶(全脂)': FoodCategory.dairy,
+  '坚果(混合)': FoodCategory.snack,
+  '低脂牛奶': FoodCategory.dairy,
+  '杏仁': FoodCategory.snack,
+  '可乐': FoodCategory.drink,
+  '番茄炒蛋': FoodCategory.dish,
+};
+
+final Map<String, FoodCategory> seedFoodCategories = () {
+  var category = FoodCategory.other;
+  final result = <String, FoodCategory>{};
+  for (final food in kSeedFoods) {
+    category = _categoryStarts[food.name] ?? category;
+    result[food.name] = category;
+  }
+  return result;
+}();
+
 /// 首次安装写入全部内置食物；版本升级时只补充缺失名称。
 /// 不覆盖用户修改过的食物，也不在每次启动时重新添加用户删除的食物。
 const _catalogVersion = 2;
@@ -283,6 +309,7 @@ const _catalogVersionKey = 'builtinFoodCatalogVersion';
 
 Future<void> seedIfEmpty(AppDatabase db) async {
   final prefs = await SharedPreferences.getInstance();
+  await backfillBuiltInFoodCategories(db);
   if ((prefs.getInt(_catalogVersionKey) ?? 0) >= _catalogVersion &&
       await db.foodCount() > 0) {
     return;
@@ -302,6 +329,7 @@ Future<void> seedIfEmpty(AppDatabase db) async {
             (food) => FoodsCompanion.insert(
               name: food.name,
               source: const Value('builtin'),
+              category: Value(seedFoodCategories[food.name]!.code),
               kcal100: food.kcal,
               protein100: Value(food.protein),
               fat100: Value(food.fat),
@@ -314,4 +342,23 @@ Future<void> seedIfEmpty(AppDatabase db) async {
     );
   });
   await prefs.setInt(_catalogVersionKey, _catalogVersion);
+}
+
+/// Also run after backup import: old backups do not contain the category field.
+/// Explicit "Other" choices, edited names, and user-created foods stay untouched.
+Future<void> backfillBuiltInFoodCategories(AppDatabase db) async {
+  final builtins = await (db.select(db.foods)
+        ..where((f) => f.source.equals('builtin') & f.category.equals('legacy')))
+      .get();
+  if (builtins.isEmpty) return;
+  await db.batch((batch) {
+    for (final food in builtins) {
+      final category = seedFoodCategories[food.name] ?? FoodCategory.other;
+      batch.update(
+        db.foods,
+        FoodsCompanion(category: Value(category.code)),
+        where: (f) => f.id.equals(food.id),
+      );
+    }
+  });
 }

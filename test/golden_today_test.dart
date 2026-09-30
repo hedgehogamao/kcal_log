@@ -55,46 +55,53 @@ void main() {
     db = AppDatabase.forTesting(NativeDatabase.memory());
     today = dateKey(DateTime.now());
 
-    rice = await db.upsertFood(FoodsCompanion.insert(
-      name: '米饭',
-      kcal100: 116,
-      protein100: const Value(2.6),
-      fat100: const Value(0.3),
-      carb100: const Value(25.9),
-    ));
-    final egg = await db.upsertFood(FoodsCompanion.insert(
-      name: '水煮蛋',
-      kcal100: 151,
-      protein100: const Value(12.6),
-      fat100: const Value(10.6),
-      carb100: const Value(1.6),
-    ));
-    await db.addEntry(EntriesCompanion.insert(
-      date: today,
-      meal: MealType.breakfast,
-      name: egg.name,
-      foodId: Value(egg.id),
-      grams: const Value(100),
-      kcal: 151,
-      protein: const Value(12.6),
-      fat: const Value(10.6),
-      carb: const Value(1.6),
-    ));
-    await db.addEntry(EntriesCompanion.insert(
-      date: today,
-      meal: MealType.lunch,
-      name: rice.name,
-      foodId: Value(rice.id),
-      grams: const Value(200),
-      kcal: 232,
-      protein: const Value(5.2),
-      fat: const Value(0.6),
-      carb: const Value(51.8),
-    ));
-    await db.saveProfile(ProfilesCompanion(
-      id: const Value(1),
-      kcalGoal: const Value(1800),
-    ));
+    rice = await db.upsertFood(
+      FoodsCompanion.insert(
+        name: '米饭',
+        kcal100: 116,
+        protein100: const Value(2.6),
+        fat100: const Value(0.3),
+        carb100: const Value(25.9),
+      ),
+    );
+    final egg = await db.upsertFood(
+      FoodsCompanion.insert(
+        name: '水煮蛋',
+        kcal100: 151,
+        protein100: const Value(12.6),
+        fat100: const Value(10.6),
+        carb100: const Value(1.6),
+      ),
+    );
+    await db.addEntry(
+      EntriesCompanion.insert(
+        date: today,
+        meal: MealType.breakfast,
+        name: egg.name,
+        foodId: Value(egg.id),
+        grams: const Value(100),
+        kcal: 151,
+        protein: const Value(12.6),
+        fat: const Value(10.6),
+        carb: const Value(1.6),
+      ),
+    );
+    await db.addEntry(
+      EntriesCompanion.insert(
+        date: today,
+        meal: MealType.lunch,
+        name: rice.name,
+        foodId: Value(rice.id),
+        grams: const Value(200),
+        kcal: 232,
+        protein: const Value(5.2),
+        fat: const Value(0.6),
+        carb: const Value(51.8),
+      ),
+    );
+    await db.saveProfile(
+      ProfilesCompanion(id: const Value(1), kcalGoal: const Value(1800)),
+    );
     await db.addWater(today, 750);
   });
 
@@ -102,8 +109,7 @@ void main() {
 
   Future<void> snap(WidgetTester tester, String name) async {
     final bytes = await tester.runAsync(() async {
-      final image =
-          await captureImage(find.byType(Navigator).evaluate().first);
+      final image = await captureImage(find.byType(Navigator).evaluate().first);
       return image.toByteData(format: ui.ImageByteFormat.png);
     });
     File('test/goldens/$name').writeAsBytesSync(bytes!.buffer.asUint8List());
@@ -119,15 +125,15 @@ void main() {
   }
 
   ProviderScope app({required WidgetBuilder home}) => ProviderScope(
-        overrides: [
-          prefsProvider.overrideWithValue(prefs),
-          dbProvider.overrideWithValue(db),
-        ],
-        child: LangScope(
-          lang: AppLang.zh,
-          child: MaterialApp(home: Builder(builder: home)),
-        ),
-      );
+    overrides: [
+      prefsProvider.overrideWithValue(prefs),
+      dbProvider.overrideWithValue(db),
+    ],
+    child: LangScope(
+      lang: AppLang.zh,
+      child: MaterialApp(home: Builder(builder: home)),
+    ),
+  );
 
   testWidgets('今日页正面（活动环+四餐进度+饮水+折叠餐次）', (tester) async {
     tester.view.physicalSize = const Size(430, 2200);
@@ -142,13 +148,13 @@ void main() {
     await drain(tester);
   });
 
-  testWidgets('今日页背面（总览卡翻转看计算规则）', (tester) async {
+  testWidgets('今日页明确打开计算说明，不隐藏总览', (tester) async {
     tester.view.physicalSize = const Size(430, 2200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(app(home: (_) => TodayPage()));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('点按翻转').first);
+    await tester.tap(find.byKey(const ValueKey('today-calculation-help')));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(find.text('数字是怎么算的'), findsOneWidget);
@@ -160,22 +166,28 @@ void main() {
     tester.view.physicalSize = const Size(430, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(app(
-      home: (_) => Scaffold(
-        body: Builder(
-          builder: (context) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              showEntrySheet(context,
-                  date: today, meal: MealType.lunch, food: rice);
-            });
-            return const SizedBox.shrink();
-          },
+    await tester.pumpWidget(
+      app(
+        home: (_) => Scaffold(
+          body: Builder(
+            builder: (context) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                showEntrySheet(
+                  context,
+                  date: today,
+                  meal: MealType.lunch,
+                  food: rice,
+                );
+              });
+              return const SizedBox.shrink();
+            },
+          ),
         ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    expect(find.text('添加'), findsOneWidget); // 新增模式
+    expect(find.text('确认记录'), findsOneWidget); // 新增模式
     // 输入份量 → 预览与底栏剩余同步刷新
     await tester.enterText(find.byType(TextFormField), '250');
     await tester.pumpAndSettle();

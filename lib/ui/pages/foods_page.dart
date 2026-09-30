@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/db.dart';
 import '../../logic/calc.dart';
+import '../../logic/food_category.dart';
 import '../../logic/i18n.dart';
 import '../../logic/providers.dart';
 import '../dialogs.dart';
 import '../food_form.dart';
+import '../sheets/entry_sheet.dart';
+import '../theme.dart';
+import '../widgets/food_list_item.dart';
 import '../widgets/filter_pills.dart';
+import '../widgets/food_category_filter.dart';
 import '../widgets/top_tabs.dart';
 
 class FoodsPage extends ConsumerStatefulWidget {
@@ -27,9 +31,17 @@ class _FoodsPageState extends ConsumerState<FoodsPage> {
       appBar: AppBar(title: Text(tr(context, 'tabFoods'))),
       body: TopTabs(
         tabs: [tr(context, 'foods'), tr(context, 'templates')],
-        pageBuilder: (_, i) => i == 0
-            ? _FoodsTab(onQuery: (v) => setState(() => _query = v), query: _query)
-            : const _TemplatesTab(),
+        pageBuilder: (_, i) => Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 960),
+            child: i == 0
+                ? _FoodsTab(
+                    onQuery: (v) => setState(() => _query = v),
+                    query: _query,
+                  )
+                : const _TemplatesTab(),
+          ),
+        ),
       ),
     );
   }
@@ -50,8 +62,35 @@ class _FoodsTab extends ConsumerStatefulWidget {
 
 class _FoodsTabState extends ConsumerState<_FoodsTab> {
   FoodSourceFilter _source = FoodSourceFilter.all;
+  FoodCategory? _category;
+  late final TextEditingController _searchCtrl;
 
-  bool _match(Food f) => switch (_source) {
+  @override
+  void initState() {
+    super.initState();
+    _searchCtrl = TextEditingController(text: widget.query);
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _createFood() async {
+    final food = await showFoodForm(context, initialCategory: _category);
+    if (food == null || !mounted) return;
+    _searchCtrl.text = food.name;
+    widget.onQuery(food.name);
+    setState(() {
+      _source = FoodSourceFilter.custom;
+      _category = FoodCategory.fromCode(food.category);
+    });
+  }
+
+  bool _match(Food f) =>
+      (_category == null || f.category == _category!.code) &&
+      switch (_source) {
         FoodSourceFilter.all => true,
         FoodSourceFilter.fav => f.favorite,
         FoodSourceFilter.builtin => f.source == 'builtin',
@@ -70,21 +109,43 @@ class _FoodsTabState extends ConsumerState<_FoodsTab> {
             children: [
               Expanded(
                 child: TextField(
-                  onChanged: widget.onQuery,
+                  controller: _searchCtrl,
+                  onChanged: (value) {
+                    widget.onQuery(value);
+                    setState(() {});
+                  },
                   decoration: InputDecoration(
                     prefixIcon: const Icon(Icons.search),
                     hintText: tr(context, 'searchName'),
                     isDense: true,
+                    suffixIcon: _searchCtrl.text.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: tr(context, 'clearSearch'),
+                            icon: const Icon(Icons.close, size: 18),
+                            onPressed: () {
+                              _searchCtrl.clear();
+                              widget.onQuery('');
+                              setState(() {});
+                            },
+                          ),
                   ),
                 ),
               ),
               const SizedBox(width: 8),
               IconButton.filledTonal(
                 tooltip: tr(context, 'newCustomFood'),
-                onPressed: () => showFoodForm(context),
+                onPressed: _createFood,
                 icon: const Icon(Icons.add),
               ),
             ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: FoodCategoryFilter(
+            selected: _category,
+            onChanged: (value) => setState(() => _category = value),
           ),
         ),
         // 来源筛选胶囊：选中实底，超出横向滚动
@@ -106,15 +167,105 @@ class _FoodsTabState extends ConsumerState<_FoodsTab> {
           child: StreamBuilder<List<Food>>(
             stream: db.watchFoods(widget.query),
             builder: (context, snap) {
-              final list =
-                  (snap.data ?? const <Food>[]).where(_match).toList();
-              if (list.isEmpty) {
-                return Center(child: Text(tr(context, 'noFoods')));
+              if (!snap.hasData) {
+                return const Center(child: CircularProgressIndicator());
               }
-              return ListView.builder(
-                padding: const EdgeInsets.only(bottom: 24),
-                itemCount: list.length,
-                itemBuilder: (context, i) => _FoodRow(food: list[i]),
+              final list = snap.data!.where(_match).toList();
+              if (list.isEmpty) {
+                return Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        tr(
+                          context,
+                          widget.query.trim().isEmpty &&
+                                  _source == FoodSourceFilter.all &&
+                                  _category == null
+                              ? 'noFoods'
+                              : 'noMatchShort',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      if (widget.query.trim().isNotEmpty ||
+                          _source != FoodSourceFilter.all ||
+                          _category != null) ...[
+                        TextButton.icon(
+                          onPressed: () {
+                            _searchCtrl.clear();
+                            widget.onQuery('');
+                            setState(() {
+                              _source = FoodSourceFilter.all;
+                              _category = null;
+                            });
+                          },
+                          icon: const Icon(Icons.filter_alt_off, size: 18),
+                          label: Text(tr(context, 'clearFilters')),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      OutlinedButton.icon(
+                        onPressed: _createFood,
+                        icon: const Icon(Icons.add, size: 18),
+                        label: Text(tr(context, 'newCustomFood')),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              final rows = <Object>[];
+              if (widget.query.trim().isEmpty &&
+                  _source == FoodSourceFilter.all &&
+                  _category == null) {
+                void group(String label, bool Function(Food) include) {
+                  final foods = list.where(include).toList();
+                  if (foods.isEmpty) return;
+                  rows.add('$label · ${foods.length}');
+                  rows.addAll(foods);
+                }
+
+                group(tr(context, 'fav'), (food) => food.favorite);
+                group(
+                  tr(context, 'myFoods'),
+                  (food) => !food.favorite && food.source == 'custom',
+                );
+                group(
+                  tr(context, 'sourceBuiltin'),
+                  (food) => !food.favorite && food.source == 'builtin',
+                );
+                group('OFF', (food) => !food.favorite && food.source == 'off');
+              } else {
+                rows.addAll(list);
+              }
+              return Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 0, 18, 10),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        tr(context, 'foodResults', {'n': '${list.length}'}),
+                        style: captionStyle(context),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.only(bottom: 24),
+                      itemCount: rows.length,
+                      itemBuilder: (context, i) {
+                        final row = rows[i];
+                        if (row is String) {
+                          return Padding(
+                            padding: const EdgeInsets.fromLTRB(18, 12, 18, 8),
+                            child: Text(row, style: captionStyle(context)),
+                          );
+                        }
+                        return _FoodRow(food: row as Food);
+                      },
+                    ),
+                  ),
+                ],
               );
             },
           ),
@@ -132,53 +283,31 @@ class _FoodRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final db = ref.watch(dbProvider);
-    final badge = switch (food.source) {
-      'off' => 'OFF',
-      'builtin' => tr(context, 'sourceBuiltin'),
-      _ => tr(context, 'sourceCustom'),
-    };
-    return ListTile(
-      title: Text(food.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: Text(
-        '${food.brand == null ? '' : '${food.brand} · '}'
-        '${tr(context, 'per100g')} ${round1(food.kcal100)} kcal · '
-        '${tr(context, 'proteinShort')} ${round1(food.protein100)} '
-        '${tr(context, 'fatShort')} ${round1(food.fat100)} '
-        '${tr(context, 'carbShort')} ${round1(food.carb100)} · $badge',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+    return FoodListItem(
+      food: food,
+      onTap: () => showEntrySheet(
+        context,
+        date: dateKey(DateTime.now()),
+        meal: currentMealType(),
+        food: food,
       ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            tooltip: food.favorite
-                ? tr(context, 'favRemove')
-                : tr(context, 'favAdd'),
-            icon: Icon(
-              food.favorite ? Icons.star_rounded : Icons.star_outline_rounded,
-              color: food.favorite ? Colors.amber : null,
-            ),
-            onPressed: () => db.toggleFavorite(food),
-          ),
-          PopupMenuButton<String>(
-            onSelected: (v) async {
-              if (v == 'edit') {
-                await showFoodForm(context, existing: food);
-              } else if (v == 'delete') {
-                await showConfirmDialog(
-                  context,
-                  title: tr(context, 'delFoodTitle', {'name': food.name}),
-                  content: tr(context, 'delFoodBody'),
-                  onConfirm: () => db.deleteFood(food.id),
-                );
-              }
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(value: 'edit', child: Text(tr(context, 'edit'))),
-              PopupMenuItem(value: 'delete', child: Text(tr(context, 'delete'))),
-            ],
-          ),
+      onFavorite: () => db.toggleFavorite(food),
+      menu: PopupMenuButton<String>(
+        onSelected: (v) async {
+          if (v == 'edit') {
+            await showFoodForm(context, existing: food);
+          } else if (v == 'delete') {
+            await showConfirmDialog(
+              context,
+              title: tr(context, 'delFoodTitle', {'name': food.name}),
+              content: tr(context, 'delFoodBody'),
+              onConfirm: () => db.deleteFood(food.id),
+            );
+          }
+        },
+        itemBuilder: (context) => [
+          PopupMenuItem(value: 'edit', child: Text(tr(context, 'edit'))),
+          PopupMenuItem(value: 'delete', child: Text(tr(context, 'delete'))),
         ],
       ),
     );
@@ -196,20 +325,37 @@ class _TemplatesTab extends ConsumerWidget {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(tr(context, 'templateHint'),
-                    style: Theme.of(context).textTheme.bodySmall),
-              ),
-              FilledButton.tonalIcon(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final hint = Text(
+                tr(context, 'templateHint'),
+                style: Theme.of(context).textTheme.bodySmall,
+              );
+              final action = FilledButton.tonalIcon(
                 onPressed: () => showDialog(
-                    context: context,
-                    builder: (_) => const _TemplateEditor()),
+                  context: context,
+                  builder: (_) => const _TemplateEditor(),
+                ),
                 icon: const Icon(Icons.add, size: 18),
-                label: Text(tr(context, 'newTemplate')),
-              ),
-            ],
+                label: Text(
+                  tr(context, 'newTemplate'),
+                  textAlign: TextAlign.center,
+                ),
+              );
+              if (constraints.maxWidth < 520) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [hint, const SizedBox(height: 8), action],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(child: hint),
+                  const SizedBox(width: 16),
+                  action,
+                ],
+              );
+            },
           ),
         ),
         Expanded(
@@ -222,9 +368,7 @@ class _TemplatesTab extends ConsumerWidget {
               }
               return ListView(
                 padding: const EdgeInsets.only(bottom: 24),
-                children: [
-                  for (final t in list) _TemplateRow(template: t),
-                ],
+                children: [for (final t in list) _TemplateRow(template: t)],
               );
             },
           ),
@@ -245,15 +389,16 @@ class _TemplateRow extends ConsumerWidget {
     return ListTile(
       leading: const Icon(Icons.layers_outlined),
       title: Text(template.name),
-      subtitle: Text(tr(context, 'tapToEdit'),
-          style: Theme.of(context).textTheme.bodySmall),
+      subtitle: Text(
+        tr(context, 'tapToEdit'),
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
       trailing: PopupMenuButton<String>(
         onSelected: (v) async {
           if (v == 'delete') {
             await showConfirmDialog(
               context,
-              title:
-                  tr(context, 'delTplTitle', {'name': template.name}),
+              title: tr(context, 'delTplTitle', {'name': template.name}),
               content: tr(context, 'delTplBody'),
               onConfirm: () => db.deleteTemplate(template.id),
             );
@@ -264,8 +409,9 @@ class _TemplateRow extends ConsumerWidget {
         ],
       ),
       onTap: () => showDialog(
-          context: context,
-          builder: (_) => _TemplateEditor(existing: template)),
+        context: context,
+        builder: (_) => _TemplateEditor(existing: template),
+      ),
     );
   }
 }
@@ -281,18 +427,24 @@ class _TemplateEditor extends ConsumerStatefulWidget {
 
 class _TemplateItemRow {
   _TemplateItemRow(this.food, double grams)
-      : ctrl = TextEditingController(text: round1(grams).toString());
+    : ctrl = TextEditingController(text: grams.toString());
   final Food food;
   final TextEditingController ctrl;
-
   double? get grams => double.tryParse(ctrl.text.trim());
-
+  bool get valid =>
+      grams != null && grams!.isFinite && grams! > 0 && grams! <= 100000;
   void dispose() => ctrl.dispose();
 }
 
 class _TemplateEditorState extends ConsumerState<_TemplateEditor> {
   late final TextEditingController _nameCtrl;
   final List<_TemplateItemRow> _items = [];
+  bool _loading = false,
+      _saving = false,
+      _selecting = false,
+      _submitted = false;
+  bool _loadFailed = false;
+  String? _error;
 
   @override
   void initState() {
@@ -304,188 +456,309 @@ class _TemplateEditorState extends ConsumerState<_TemplateEditor> {
   Future<void> _load() async {
     final existing = widget.existing;
     if (existing == null) return;
-    final db = ref.read(dbProvider);
-    final items = await db.itemsOf(existing.id);
-    final foods = await db.foodsByIds(items.map((i) => i.foodId).toList());
-    final byId = {for (final f in foods) f.id: f};
-    if (!mounted) return;
     setState(() {
-      for (final it in items) {
-        final f = byId[it.foodId];
-        if (f != null) _items.add(_TemplateItemRow(f, it.grams));
-      }
+      _loading = true;
+      _loadFailed = false;
+      _error = null;
     });
+    try {
+      final db = ref.read(dbProvider);
+      final items = await db.itemsOf(existing.id);
+      final foods = await db.foodsByIds(items.map((i) => i.foodId).toList());
+      final byId = {for (final f in foods) f.id: f};
+      if (!mounted) return;
+      setState(() {
+        for (final it in items) {
+          final f = byId[it.foodId];
+          if (f != null) _items.add(_TemplateItemRow(f, it.grams));
+        }
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _loadFailed = true;
+          _error = tr(context, 'templateLoadFail');
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override
   void dispose() {
     _nameCtrl.dispose();
-    for (final i in _items) {
-      i.dispose();
+    for (final item in _items) {
+      item.dispose();
     }
     super.dispose();
   }
 
   Future<void> _addFood() async {
+    if (_selecting || _saving || _loading || _loadFailed) return;
+    setState(() => _selecting = true);
     final food = await showFoodSearchDialog(context);
-    if (food == null) return;
-    setState(() => _items.add(_TemplateItemRow(food, food.servingGrams ?? 100)));
+    if (!mounted) return;
+    setState(() {
+      _selecting = false;
+      if (food != null) {
+        final portion = food.servingGrams;
+        _items.add(
+          _TemplateItemRow(
+            food,
+            portion != null &&
+                    portion.isFinite &&
+                    portion > 0 &&
+                    portion <= 100000
+                ? portion
+                : 100,
+          ),
+        );
+        _error = null;
+      }
+    });
   }
 
   Future<void> _save() async {
+    if (_saving || _loading || _loadFailed) return;
+    setState(() {
+      _submitted = true;
+      _error = null;
+    });
     final name = _nameCtrl.text.trim();
     if (name.isEmpty || _items.isEmpty) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(tr(context, 'needNameItems'))));
+      setState(() => _error = tr(context, 'needNameItems'));
       return;
     }
-    final parsed = <(int, double)>[];
-    for (final it in _items) {
-      final g = it.grams;
-      if (g == null || g <= 0) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(
-                tr(context, 'invalidGrams', {'name': it.food.name}))));
-        return;
+    if (_items.any((item) => !item.valid)) return;
+    FocusScope.of(context).unfocus();
+    setState(() => _saving = true);
+    try {
+      final db = ref.read(dbProvider);
+      final parsed = [for (final item in _items) (item.food.id, item.grams!)];
+      if (widget.existing == null) {
+        await db.saveTemplate(name, parsed);
+      } else {
+        await db.updateTemplate(widget.existing!.id, name, parsed);
       }
-      parsed.add((it.food.id, g));
+      if (mounted) Navigator.pop(context);
+    } catch (_) {
+      if (mounted) setState(() => _error = tr(context, 'saveFail'));
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
-    final db = ref.read(dbProvider);
-    if (widget.existing == null) {
-      await db.saveTemplate(name, parsed);
-    } else {
-      await db.updateTemplate(widget.existing!.id, name, parsed);
-    }
-    if (mounted) Navigator.pop(context);
+  }
+
+  void _step(_TemplateItemRow item, double delta) {
+    final current = item.valid ? item.grams! : 100.0;
+    // Keep decimal quantities; a decrement never leaves an unsavable zero.
+    final next = (current + delta).clamp(1.0, 100000.0);
+    setState(() {
+      item.ctrl.text = next.toString();
+      _error = null;
+    });
+  }
+
+  Widget _item(_TemplateItemRow item) {
+    return Card(
+      key: ValueKey(item),
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    item.food.name,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                IconButton(
+                  tooltip: tr(context, 'templateRemove', {
+                    'name': item.food.name,
+                  }),
+                  onPressed: _saving
+                      ? null
+                      : () {
+                          setState(() => _items.remove(item));
+                          // Dispose after the removed TextField has left the tree.
+                          WidgetsBinding.instance.addPostFrameCallback(
+                            (_) => item.dispose(),
+                          );
+                        },
+                  icon: const Icon(Icons.close, size: 20),
+                ),
+              ],
+            ),
+            Text(
+              tr(context, 'templateGrams'),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                _StepButton(
+                  icon: Icons.remove,
+                  tooltip: tr(context, 'templateLess'),
+                  onTap: _saving ? null : () => _step(item, -50),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    key: ValueKey(
+                      'template_grams_${item.food.id}_${_items.indexOf(item)}',
+                    ),
+                    controller: item.ctrl,
+                    enabled: !_saving,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    textAlign: TextAlign.center,
+                    decoration: const InputDecoration(isDense: true),
+                    onChanged: (_) => setState(() => _error = null),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _StepButton(
+                  icon: Icons.add,
+                  tooltip: tr(context, 'templateMore'),
+                  onTap: _saving ? null : () => _step(item, 50),
+                ),
+              ],
+            ),
+            if (_submitted && !item.valid) ...[
+              const SizedBox(height: 6),
+              Text(
+                tr(context, 'templateGramsRange'),
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    var totalKcal = 0.0;
-    for (final it in _items) {
-      final g = it.grams;
-      if (g != null) totalKcal += it.food.kcal100 * g / 100;
-    }
-    return AlertDialog(
-      title: Text(widget.existing == null
-          ? tr(context, 'newTemplate')
-          : tr(context, 'editTplTitle')),
-      content: SizedBox(
-        width: 440,
-        height: 460,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: _nameCtrl,
-              decoration: InputDecoration(
-                  labelText: tr(context, 'nameField'),
-                  hintText: tr(context, 'nameHint')),
-            ),
-            const SizedBox(height: 8),
-            Text(
-                tr(context, 'tplSummary', {
-                  'n': '${_items.length}',
-                  'k': '${round1(totalKcal)}',
-                }),
-                style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: 8),
-            Expanded(
-              child: _items.isEmpty
-                  ? Center(
-                      child: Text(tr(context, 'tplEmpty'),
-                          style: Theme.of(context).textTheme.bodySmall))
-                  : ListView.builder(
-                      itemCount: _items.length,
-                      itemBuilder: (context, i) {
-                        final it = _items[i];
-                        return Row(
-                          children: [
-                            Expanded(
-                              child: Text(it.food.name,
-                                  maxLines: 1, overflow: TextOverflow.ellipsis),
-                            ),
-                            // 克数步进：±50g 就地生效，顶部汇总实时回显
-                            _StepButton(
-                              icon: Icons.remove,
-                              onTap: () => setState(() {
-                                final g = (it.grams ?? 0) - 50;
-                                it.ctrl.text = (g < 0 ? 0 : g).toStringAsFixed(0);
-                              }),
-                            ),
-                            SizedBox(
-                              width: 72,
-                              child: TextField(
-                                controller: it.ctrl,
-                                keyboardType: const TextInputType.numberWithOptions(
-                                    decimal: true),
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.allow(
-                                      RegExp(r'[\d.]')),
-                                ],
-                                textAlign: TextAlign.center,
-                                decoration: const InputDecoration(
-                                    suffixText: 'g', isDense: true),
-                                onChanged: (_) => setState(() {}),
-                              ),
-                            ),
-                            _StepButton(
-                              icon: Icons.add,
-                              onTap: () => setState(() {
-                                final g = (it.grams ?? 0) + 50;
-                                it.ctrl.text = g.toStringAsFixed(0);
-                              }),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.close, size: 18),
-                              onPressed: () =>
-                                  setState(() => _items.removeAt(i)),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-            ),
-            OutlinedButton.icon(
-              onPressed: _addFood,
-              icon: const Icon(Icons.add, size: 18),
-              label: Text(tr(context, 'addFood')),
-            ),
-          ],
+    final useKj = ref.watch(settingsProvider).useKj;
+    final totalKcal = _items
+        .where((item) => item.valid)
+        .fold(
+          0.0,
+          (double sum, item) => sum + item.food.kcal100 * item.grams! / 100,
+        );
+    return PopScope(
+      canPop: !_saving,
+      child: AlertDialog(
+        insetPadding: const EdgeInsets.all(16),
+        titlePadding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+        contentPadding: const EdgeInsets.all(16),
+        scrollable: true,
+        title: Text(
+          widget.existing == null
+              ? tr(context, 'newTemplate')
+              : tr(context, 'editTplTitle'),
         ),
+        content: SizedBox(
+          width: 520,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                tr(context, 'templateSaveNote'),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 16),
+              Text(tr(context, 'nameField')),
+              const SizedBox(height: 8),
+              TextField(
+                key: const ValueKey('template_name'),
+                controller: _nameCtrl,
+                enabled: !_loading && !_saving && !_loadFailed,
+                decoration: InputDecoration(
+                  hintText: tr(context, 'nameHint'),
+                  isDense: true,
+                ),
+                onChanged: (_) => setState(() => _error = null),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                tr(context, 'templateSummaryUnit', {
+                  'n': '${_items.length}',
+                  'energy':
+                      '${fmtEnergy(totalKcal, useKj)} ${energyUnit(useKj)}',
+                }),
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 12),
+              if (_loading)
+                const Center(child: CircularProgressIndicator())
+              else if (_items.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: Text(tr(context, 'tplEmpty')),
+                )
+              else
+                ..._items.map(_item),
+              if (_error != null) ...[
+                Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+                if (_error == tr(context, 'templateLoadFail'))
+                  TextButton(
+                    onPressed: _load,
+                    child: Text(tr(context, 'retry')),
+                  ),
+                const SizedBox(height: 8),
+              ],
+              OutlinedButton.icon(
+                onPressed: _loading || _saving || _selecting || _loadFailed
+                    ? null
+                    : _addFood,
+                icon: const Icon(Icons.add),
+                label: Text(tr(context, 'addFood')),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: _saving ? null : () => Navigator.pop(context),
+            child: Text(tr(context, 'cancel')),
+          ),
+          FilledButton(
+            onPressed: _loading || _saving || _selecting || _loadFailed
+                ? null
+                : _save,
+            child: Text(tr(context, _saving ? 'saving' : 'save')),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(tr(context, 'cancel'))),
-        FilledButton(onPressed: _save, child: Text(tr(context, 'save'))),
-      ],
     );
   }
 }
 
-/// 组合餐编辑器里的圆形小步进按钮
+/// Native focusable controls with a minimum 44-pixel hit target.
 class _StepButton extends StatelessWidget {
-  const _StepButton({required this.icon, required this.onTap});
-
+  const _StepButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
   final IconData icon;
-  final VoidCallback onTap;
-
+  final String tooltip;
+  final VoidCallback? onTap;
   @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 28,
-        height: 28,
-        margin: const EdgeInsets.symmetric(horizontal: 2),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          shape: BoxShape.circle,
-        ),
-        child: Icon(icon,
-            size: 15, color: Theme.of(context).colorScheme.primary),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => IconButton.filledTonal(
+    constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+    tooltip: tooltip,
+    onPressed: onTap,
+    icon: Icon(icon, size: 20),
+  );
 }

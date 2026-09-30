@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:kcal_log/data/db.dart';
 import 'package:kcal_log/data/seed_data.dart';
+import 'package:kcal_log/logic/food_category.dart';
 
 void main() {
   late AppDatabase db;
@@ -34,6 +35,71 @@ void main() {
     await seedIfEmpty(db);
     expect(await db.foodCount(), kSeedFoods.length);
     expect((await db.searchFoods('牛肉面')).single.source, 'builtin');
+    expect(seedFoodCategories.length, 237);
+    expect(seedFoodCategories.values, isNot(contains(FoodCategory.other)));
+    expect((await db.searchFoods('米饭')).firstWhere((f) => f.name == '米饭').category, 'staple');
+    expect((await db.searchFoods('鸡蛋')).firstWhere((f) => f.name == '鸡蛋').category, 'protein');
+    expect((await db.searchFoods('苹果')).firstWhere((f) => f.name == '苹果').category, 'fruit');
+    expect((await db.searchFoods('杏仁')).firstWhere((f) => f.name == '杏仁').category, 'snack');
+    expect((await db.searchFoods('可乐')).firstWhere((f) => f.name == '可乐').category, 'drink');
+    expect((await db.searchFoods('番茄炒蛋')).firstWhere((f) => f.name == '番茄炒蛋').category, 'dish');
+  });
+
+  test('upgraded built-ins gain categories without changing custom rows', () async {
+    final builtin = await db.upsertFood(FoodsCompanion.insert(
+      name: '米饭',
+      kcal100: 999,
+      source: const Value('builtin'),
+      category: const Value('legacy'),
+    ));
+    final custom = await db.upsertFood(FoodsCompanion.insert(
+      name: '苹果',
+      kcal100: 777,
+    ));
+    SharedPreferences.setMockInitialValues({'builtinFoodCatalogVersion': 2});
+    await seedIfEmpty(db);
+    final upgraded = (await db.searchFoods('米饭')).firstWhere((f) => f.name == '米饭');
+    expect(upgraded.id, builtin.id);
+    expect(upgraded.kcal100, 999);
+    expect(upgraded.category, 'staple');
+    final untouched = (await db.searchFoods('苹果')).single;
+    expect(untouched.id, custom.id);
+    expect(untouched.kcal100, 777);
+    expect(untouched.category, 'other');
+    expect(await db.foodCount(), 2);
+  });
+
+  test('old backup import regains categories without duplicating foods', () async {
+    await seedIfEmpty(db);
+    final backup = await db.exportJson();
+    for (final food in backup['foods'] as List) {
+      (food as Map<String, dynamic>).remove('category');
+    }
+    await db.importJson(backup);
+    expect((await db.searchFoods('米饭')).firstWhere((f) => f.name == '米饭').category,
+        'legacy');
+    await backfillBuiltInFoodCategories(db);
+    expect(await db.foodCount(), 237);
+    expect((await db.searchFoods('米饭')).firstWhere((f) => f.name == '米饭').category,
+        'staple');
+  });
+
+  test('explicit Other category on built-in food is not overwritten', () async {
+    await db.upsertFood(FoodsCompanion.insert(
+      name: '米饭',
+      kcal100: 116,
+      source: const Value('builtin'),
+      category: const Value('other'),
+    ));
+    SharedPreferences.setMockInitialValues({'builtinFoodCatalogVersion': 2});
+    await seedIfEmpty(db);
+    final rice = (await db.searchFoods('米饭')).firstWhere((f) => f.name == '米饭');
+    expect(rice.category, 'other');
+    final backup = await db.exportJson();
+    await db.importJson(backup);
+    await backfillBuiltInFoodCategories(db);
+    final restored = (await db.searchFoods('米饭')).firstWhere((f) => f.name == '米饭');
+    expect(restored.category, 'other');
   });
 
   test(

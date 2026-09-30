@@ -63,11 +63,11 @@ TextStyle numberStyle(double size, Color color, {FontWeight? weight}) =>
 
 /// iOS 分组列表小节标题（13px 常规、次要色）
 TextStyle captionStyle(BuildContext context) => TextStyle(
-      fontSize: 13,
-      fontWeight: FontWeight.w400,
-      letterSpacing: 0.1,
-      color: Theme.of(context).colorScheme.onSurfaceVariant,
-    );
+  fontSize: 13,
+  fontWeight: FontWeight.w400,
+  letterSpacing: 0.1,
+  color: Theme.of(context).colorScheme.onSurfaceVariant,
+);
 
 ThemeData _theme({required bool dark}) {
   final paper = dark ? LabelColors.dPaper : LabelColors.paper;
@@ -78,28 +78,36 @@ ThemeData _theme({required bool dark}) {
   final blue = LabelColors.blueOf(dark);
   // 卡片内部的 iOS 细分隔线比全局 separator 更浅
   final cellSep = dark ? LabelColors.dRule : const Color(0xFFE2E2E7);
-  final scheme = ColorScheme.fromSeed(
-    seedColor: blue,
-    brightness: dark ? Brightness.dark : Brightness.light,
-  ).copyWith(
-    primary: blue,
-    onPrimary: Colors.white,
-    secondary: LabelColors.energyOf(dark),
-    onSecondary: Colors.white,
-    tertiary: LabelColors.carbOf(dark),
-    surface: card,
-    onSurface: ink,
-    surfaceContainerLowest: card,
-    surfaceContainerLow: card,
-    surfaceContainer: card,
-    surfaceContainerHigh: card,
-    surfaceContainerHighest: fill,
-    error: LabelColors.errorOf(dark),
-    onError: Colors.white,
-  );
+  final scheme =
+      ColorScheme.fromSeed(
+        seedColor: blue,
+        brightness: dark ? Brightness.dark : Brightness.light,
+      ).copyWith(
+        primary: blue,
+        onPrimary: Colors.white,
+        secondary: LabelColors.energyOf(dark),
+        onSecondary: Colors.white,
+        tertiary: LabelColors.carbOf(dark),
+        surface: card,
+        onSurface: ink,
+        surfaceContainerLowest: card,
+        surfaceContainerLow: card,
+        surfaceContainer: card,
+        surfaceContainerHigh: card,
+        surfaceContainerHighest: fill,
+        error: LabelColors.errorOf(dark),
+        onError: Colors.white,
+      );
 
+  final baseTextTheme = ThemeData(
+    brightness: dark ? Brightness.dark : Brightness.light,
+  ).textTheme;
+  final titleStyle = baseTextTheme.titleMedium!;
+  final labelStyle = baseTextTheme.bodyMedium!;
   final pill = RoundedRectangleBorder(borderRadius: BorderRadius.circular(100));
-  final cardShape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(10));
+  final cardShape = RoundedRectangleBorder(
+    borderRadius: BorderRadius.circular(10),
+  );
   final fieldRadius = BorderRadius.circular(10);
 
   return ThemeData(
@@ -119,7 +127,7 @@ ThemeData _theme({required bool dark}) {
       elevation: 0,
       scrolledUnderElevation: 0,
       centerTitle: true,
-      titleTextStyle: TextStyle(
+      titleTextStyle: titleStyle.copyWith(
         fontSize: 17,
         fontWeight: FontWeight.w600,
         letterSpacing: -0.2,
@@ -134,21 +142,30 @@ ThemeData _theme({required bool dark}) {
       focusElevation: 0,
       hoverElevation: 0,
       highlightElevation: 0,
-      extendedTextStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+      extendedTextStyle: labelStyle.copyWith(
+        fontSize: 15,
+        fontWeight: FontWeight.w600,
+      ),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         backgroundColor: blue,
         foregroundColor: Colors.white,
         shape: pill,
-        textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+        textStyle: labelStyle.copyWith(
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: blue,
-        textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+        textStyle: labelStyle.copyWith(
+          fontSize: 15,
+          fontWeight: FontWeight.w500,
+        ),
       ),
     ),
     // iOS 的「灰色调按钮」：填充而非描边
@@ -158,7 +175,10 @@ ThemeData _theme({required bool dark}) {
         foregroundColor: ink,
         side: BorderSide.none,
         shape: pill,
-        textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+        textStyle: labelStyle.copyWith(
+          fontSize: 15,
+          fontWeight: FontWeight.w500,
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       ),
     ),
@@ -166,9 +186,14 @@ ThemeData _theme({required bool dark}) {
       filled: true,
       fillColor: fill,
       isDense: true,
-      border: OutlineInputBorder(borderRadius: fieldRadius, borderSide: BorderSide.none),
-      enabledBorder:
-          OutlineInputBorder(borderRadius: fieldRadius, borderSide: BorderSide.none),
+      border: OutlineInputBorder(
+        borderRadius: fieldRadius,
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: fieldRadius,
+        borderSide: BorderSide.none,
+      ),
       focusedBorder: OutlineInputBorder(
         borderRadius: fieldRadius,
         borderSide: BorderSide(color: blue, width: 1.5),
@@ -187,7 +212,7 @@ ThemeData _theme({required bool dark}) {
         ),
       ),
       labelTextStyle: WidgetStateProperty.resolveWith(
-        (states) => TextStyle(
+        (states) => labelStyle.copyWith(
           fontSize: 10,
           fontWeight: FontWeight.w500,
           color: states.contains(WidgetState.selected) ? blue : soft,
@@ -199,8 +224,12 @@ ThemeData _theme({required bool dark}) {
       indicatorColor: fill,
       selectedIconTheme: IconThemeData(color: ink),
       unselectedIconTheme: IconThemeData(color: soft),
-      selectedLabelTextStyle: TextStyle(color: ink, fontWeight: FontWeight.w600, fontSize: 12),
-      unselectedLabelTextStyle: TextStyle(color: soft, fontSize: 12),
+      selectedLabelTextStyle: labelStyle.copyWith(
+        color: ink,
+        fontWeight: FontWeight.w600,
+        fontSize: 12,
+      ),
+      unselectedLabelTextStyle: labelStyle.copyWith(color: soft, fontSize: 12),
     ),
     tabBarTheme: TabBarThemeData(
       labelColor: blue,
@@ -208,8 +237,14 @@ ThemeData _theme({required bool dark}) {
       indicatorColor: blue,
       dividerColor: cellSep,
       indicatorSize: TabBarIndicatorSize.label,
-      labelStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-      unselectedLabelStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w400),
+      labelStyle: labelStyle.copyWith(
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+      ),
+      unselectedLabelStyle: labelStyle.copyWith(
+        fontSize: 14,
+        fontWeight: FontWeight.w400,
+      ),
     ),
     segmentedButtonTheme: SegmentedButtonThemeData(
       style: ButtonStyle(
@@ -217,8 +252,9 @@ ThemeData _theme({required bool dark}) {
         shape: WidgetStatePropertyAll(
           RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
-        textStyle: const WidgetStatePropertyAll(
-            TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+        textStyle: WidgetStatePropertyAll(
+          labelStyle.copyWith(fontSize: 13, fontWeight: FontWeight.w500),
+        ),
       ),
     ),
     chipTheme: ChipThemeData(
@@ -227,20 +263,27 @@ ThemeData _theme({required bool dark}) {
       checkmarkColor: blue,
       side: BorderSide.none,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      labelStyle: TextStyle(fontSize: 13, color: ink),
+      labelStyle: labelStyle.copyWith(fontSize: 13, color: ink),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: dark ? LabelColors.dFill : LabelColors.dCard,
-      contentTextStyle: TextStyle(color: dark ? LabelColors.dInk : Colors.white, fontSize: 14),
+      contentTextStyle: labelStyle.copyWith(
+        color: dark ? LabelColors.dInk : Colors.white,
+        fontSize: 14,
+      ),
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ),
     dialogTheme: DialogThemeData(
       backgroundColor: card,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      titleTextStyle: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: ink),
-      contentTextStyle: TextStyle(fontSize: 14, color: ink),
+      titleTextStyle: titleStyle.copyWith(
+        fontSize: 17,
+        fontWeight: FontWeight.w600,
+        color: ink,
+      ),
+      contentTextStyle: labelStyle.copyWith(fontSize: 14, color: ink),
     ),
     datePickerTheme: DatePickerThemeData(
       backgroundColor: card,
@@ -249,7 +292,7 @@ ThemeData _theme({required bool dark}) {
     popupMenuTheme: PopupMenuThemeData(
       color: card,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      textStyle: TextStyle(fontSize: 14, color: ink),
+      textStyle: labelStyle.copyWith(fontSize: 14, color: ink),
     ),
     progressIndicatorTheme: ProgressIndicatorThemeData(
       color: blue,

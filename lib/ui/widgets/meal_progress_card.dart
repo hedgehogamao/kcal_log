@@ -5,134 +5,146 @@ import '../../logic/calc.dart';
 import '../../logic/i18n.dart';
 import '../theme.dart';
 
-/// 今日四餐进度卡片：节点三态——
-/// 已记录（绿底白勾）/ 当前选中（蓝底高亮，下方展开该餐详情）/ 未记录（灰底灰点）。
-/// 点按节点切换下方展开的详情；默认选中当前餐（仅今天按钟点判断）。
+/// Four meal states, with a direct recording action for the selected meal.
 class MealProgressCard extends StatefulWidget {
   const MealProgressCard({
     super.key,
     required this.entries,
     required this.isToday,
     required this.useKj,
+    this.onAdd,
   });
-
   final List<FoodEntry> entries;
   final bool isToday;
   final bool useKj;
-
+  final ValueChanged<MealType>? onAdd;
   @override
   State<MealProgressCard> createState() => _MealProgressCardState();
 }
 
 class _MealProgressCardState extends State<MealProgressCard> {
-  /// 用户点选的餐次；null = 跟随当前餐
   MealType? _picked;
-
   @override
   Widget build(BuildContext context) {
+    final current = widget.isToday ? currentMealType() : null;
+    final selected = _picked ?? current ?? MealType.breakfast;
     final dark = Theme.of(context).brightness == Brightness.dark;
     final fill = Theme.of(context).colorScheme.surfaceContainerHighest;
-    final meals = MealType.values;
-    final current = widget.isToday ? currentMealType() : null;
-    final selected = _picked ?? current ?? meals.first;
-
-    final byMeal = {for (final m in meals) m: <FoodEntry>[]};
-    for (final e in widget.entries) {
-      byMeal[e.meal]!.add(e);
+    final byMeal = {for (final meal in MealType.values) meal: <FoodEntry>[]};
+    for (final entry in widget.entries) {
+      byMeal[entry.meal]!.add(entry);
     }
-
+    final pickedEntries = byMeal[selected]!;
     return Card(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                for (var i = 0; i < meals.length; i++) ...[
-                  if (i > 0)
-                    Expanded(
-                      child: Container(
-                        height: 3,
-                        margin: const EdgeInsets.symmetric(horizontal: 4),
-                        decoration: BoxDecoration(
-                          // 连接线：选中节点之前的段落点亮
-                          color: i <= meals.indexOf(selected)
-                              ? LabelColors.blueOf(dark)
-                              : fill,
-                          borderRadius: BorderRadius.circular(2),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final grid =
+                    constraints.maxWidth < 270 ||
+                    MediaQuery.textScalerOf(context).scale(13) > 19.5;
+                if (grid) {
+                  return Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final meal in MealType.values)
+                        SizedBox(
+                          width: (constraints.maxWidth - 8) / 2,
+                          child: _node(
+                            context,
+                            meal,
+                            byMeal[meal]!,
+                            selected: selected,
+                            current: current,
+                            horizontal: true,
+                          ),
                         ),
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    for (final (i, meal) in MealType.values.indexed) ...[
+                      if (i > 0)
+                        Expanded(
+                          child: Container(
+                            height: 3,
+                            margin: const EdgeInsets.symmetric(horizontal: 4),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(2),
+                              color: i <= selected.index
+                                  ? LabelColors.blueOf(dark)
+                                  : fill,
+                            ),
+                          ),
+                        ),
+                      _node(
+                        context,
+                        meal,
+                        byMeal[meal]!,
+                        selected: selected,
+                        current: current,
                       ),
-                    ),
-                  _node(context, meals[i], byMeal[meals[i]]!,
-                      current: current, selected: selected),
-                ],
-              ],
+                    ],
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 12),
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 280),
-              switchInCurve: Curves.easeOutCubic,
-              transitionBuilder: (child, anim) => FadeTransition(
-                opacity: anim,
-                child: SlideTransition(
-                  position: Tween<Offset>(
-                          begin: const Offset(0, 0.05), end: Offset.zero)
-                      .animate(anim),
-                  child: child,
-                ),
-              ),
               child: Container(
                 key: ValueKey(selected),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                    color: fill, borderRadius: BorderRadius.circular(10)),
-                child: Row(
+                  color: fill,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Text(mealLabel(context, selected),
-                                  style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600)),
-                              if (selected == current) ...[
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: LabelColors.blueOf(dark)
-                                        .withValues(alpha: 0.14),
-                                    borderRadius: BorderRadius.circular(100),
-                                  ),
-                                  child: Text(
-                                    tr(context, 'mealNow'),
-                                    style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                        color: LabelColors.blueOf(dark)),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                          const SizedBox(height: 2),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          mealLabel(context, selected),
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        if (selected == current)
                           Text(
-                            byMeal[selected]!.isEmpty
-                                ? tr(context, 'empty')
-                                : '${tr(context, byMeal[selected]!.length == 1 ? 'itemsOne' : 'items', {'n': '${byMeal[selected]!.length}'})}'
-                                    ' · ${fmtEnergy(byMeal[selected]!.fold(0.0, (s, e) => s + e.kcal), widget.useKj)} ${energyUnit(widget.useKj)}',
-                            style: TextStyle(
-                                fontSize: 13,
-                                color: LabelColors.inkSoftOf(dark)),
+                            tr(context, 'mealNow'),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: LabelColors.blueOf(dark)),
                           ),
-                        ],
-                      ),
+                      ],
                     ),
+                    const SizedBox(height: 4),
+                    Text(
+                      pickedEntries.isEmpty
+                          ? tr(context, 'empty')
+                          : '${tr(context, pickedEntries.length == 1 ? 'itemsOne' : 'items', {'n': '${pickedEntries.length}'})} · '
+                                '${fmtEnergy(pickedEntries.fold(0.0, (sum, e) => sum + e.kcal), widget.useKj)} ${energyUnit(widget.useKj)}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    if (widget.onAdd != null) ...[
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        key: const ValueKey('meal-progress-add'),
+                        onPressed: () => widget.onAdd!(selected),
+                        icon: const Icon(Icons.add, size: 18),
+                        label: Text(
+                          tr(context, 'addTo', {
+                            'meal': mealLabel(context, selected),
+                          }),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -143,59 +155,71 @@ class _MealProgressCardState extends State<MealProgressCard> {
     );
   }
 
-  Widget _node(BuildContext context, MealType meal, List<FoodEntry> entries,
-      {required MealType? current, required MealType selected}) {
+  Widget _node(
+    BuildContext context,
+    MealType meal,
+    List<FoodEntry> entries, {
+    required MealType selected,
+    required MealType? current,
+    bool horizontal = false,
+  }) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final fill = Theme.of(context).colorScheme.surfaceContainerHighest;
     final logged = entries.isNotEmpty;
-    final isCurrent = meal == current;
-    final isSelected = meal == selected;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => setState(() => _picked = meal),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 30,
-            height: 30,
-            decoration: BoxDecoration(
-              color: logged
-                  ? LabelColors.proteinOf(dark)
-                  : isSelected
-                      ? LabelColors.blueOf(dark)
-                      : fill,
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: logged
-                  ? const Icon(Icons.check, size: 16, color: Colors.white)
-                  : Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: isSelected
-                            ? Colors.white
-                            : LabelColors.inkSoftOf(dark),
-                      ),
-                    ),
-            ),
+    final picked = meal == selected;
+    final marker = Container(
+      width: 30,
+      height: 30,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: logged
+            ? LabelColors.proteinOf(dark)
+            : picked
+            ? LabelColors.blueOf(dark)
+            : fill,
+      ),
+      child: Icon(
+        logged ? Icons.check : Icons.circle,
+        size: logged ? 16 : 8,
+        color: logged || picked ? Colors.white : LabelColors.inkSoftOf(dark),
+      ),
+    );
+    final label = Text(
+      mealLabel(context, meal),
+      textAlign: TextAlign.center,
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+        fontSize: 13,
+        fontWeight: picked || meal == current
+            ? FontWeight.w600
+            : FontWeight.w400,
+        color: picked ? LabelColors.inkOf(dark) : LabelColors.inkSoftOf(dark),
+      ),
+    );
+    return Semantics(
+      button: true,
+      selected: picked,
+      child: InkWell(
+        key: ValueKey('meal-node-${meal.name}'),
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => setState(() => _picked = meal),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 44, minHeight: 48),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: horizontal
+                ? Row(
+                    children: [
+                      marker,
+                      const SizedBox(width: 6),
+                      Expanded(child: label),
+                    ],
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [marker, const SizedBox(height: 6), label],
+                  ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            mealLabel(context, meal),
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: isSelected || isCurrent
-                  ? FontWeight.w600
-                  : FontWeight.w400,
-              color: isSelected
-                  ? LabelColors.inkOf(dark)
-                  : LabelColors.inkSoftOf(dark),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

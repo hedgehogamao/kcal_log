@@ -15,9 +15,10 @@ class LangButton extends ConsumerWidget {
       message: tr(context, 'langTip'),
       child: InkWell(
         borderRadius: BorderRadius.circular(100),
-        onTap: () =>
-            ref.read(settingsProvider.notifier).setLang(lang.next),
+        onTap: () => ref.read(settingsProvider.notifier).setLang(lang.next),
         child: Container(
+          constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+          alignment: Alignment.center,
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surfaceContainerHighest,

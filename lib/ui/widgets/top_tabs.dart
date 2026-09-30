@@ -35,10 +35,15 @@ class _TopTabsState extends State<TopTabs> {
   void initState() {
     super.initState();
     _page.addListener(_onPage);
-    _measure();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) setState(() {}); // 让下划线在控制器挂载后出现
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _measure();
   }
 
   @override
@@ -56,12 +61,14 @@ class _TopTabsState extends State<TopTabs> {
   }
 
   void _measure() {
-    const bold = TextStyle(fontSize: 15, fontWeight: FontWeight.w600);
-    const reg = TextStyle(fontSize: 15, fontWeight: FontWeight.w400);
+    final base = Theme.of(context).textTheme.bodyMedium!;
+    final bold = base.copyWith(fontSize: 15, fontWeight: FontWeight.w600);
+    final reg = base.copyWith(fontSize: 15, fontWeight: FontWeight.w400);
     final centers = <double>[];
     var x = 16.0; // 行首留白，与 SingleChildScrollView 的 padding 一致
     for (var i = 0; i < widget.tabs.length; i++) {
-      final tw = _textWidth(widget.tabs[i], bold) > _textWidth(widget.tabs[i], reg)
+      final tw =
+          _textWidth(widget.tabs[i], bold) > _textWidth(widget.tabs[i], reg)
           ? _textWidth(widget.tabs[i], bold)
           : _textWidth(widget.tabs[i], reg);
       final w = tw + 32; // 左右各 16 内边距
@@ -74,9 +81,12 @@ class _TopTabsState extends State<TopTabs> {
   double _textWidth(String s, TextStyle style) {
     final tp = TextPainter(
       text: TextSpan(text: s, style: style),
-      textDirection: TextDirection.ltr,
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
     )..layout();
-    return tp.width;
+    final width = tp.width;
+    tp.dispose();
+    return width;
   }
 
   void _onPage() {
@@ -100,8 +110,10 @@ class _TopTabsState extends State<TopTabs> {
   void _centerLabels(double p) {
     if (_centers.length != widget.tabs.length || !_labels.hasClients) return;
     final vw = _labels.position.viewportDimension;
-    final target =
-        (_contentCenter(p) - vw / 2).clamp(0.0, _labels.position.maxScrollExtent);
+    final target = (_contentCenter(p) - vw / 2).clamp(
+      0.0,
+      _labels.position.maxScrollExtent,
+    );
     _labels.jumpTo(target);
   }
 
@@ -138,15 +150,16 @@ class _TopTabsState extends State<TopTabs> {
                             child: Center(
                               child: AnimatedDefaultTextStyle(
                                 duration: const Duration(milliseconds: 200),
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: i == sel
-                                      ? FontWeight.w600
-                                      : FontWeight.w400,
-                                  color: i == sel
-                                      ? LabelColors.inkOf(dark)
-                                      : LabelColors.inkSoftOf(dark),
-                                ),
+                                style: Theme.of(context).textTheme.bodyMedium!
+                                    .copyWith(
+                                      fontSize: 15,
+                                      fontWeight: i == sel
+                                          ? FontWeight.w600
+                                          : FontWeight.w400,
+                                      color: i == sel
+                                          ? LabelColors.inkOf(dark)
+                                          : LabelColors.inkSoftOf(dark),
+                                    ),
                                 child: Text(widget.tabs[i]),
                               ),
                             ),
@@ -159,8 +172,10 @@ class _TopTabsState extends State<TopTabs> {
               // 下划线：屏幕坐标 = 内容坐标 − 横向滚动偏移
               if (_labels.hasClients && _centers.length == n)
                 Positioned(
-                  left: (_contentCenter(_pos) - _labels.offset - 12)
-                      .clamp(0.0, double.infinity),
+                  left: (_contentCenter(_pos) - _labels.offset - 12).clamp(
+                    0.0,
+                    double.infinity,
+                  ),
                   bottom: 0,
                   child: Container(
                     width: 24,

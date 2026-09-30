@@ -9,7 +9,9 @@ class DateTimeInputFormatter extends TextInputFormatter {
 
   @override
   TextEditingValue formatEditUpdate(
-      TextEditingValue oldValue, TextEditingValue newValue) {
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
     final digits = newValue.text.replaceAll(RegExp(r'\D'), '');
     final buf = StringBuffer();
     for (var i = 0; i < digits.length && i < 12; i++) {
@@ -37,8 +39,7 @@ bool isCompleteDateTime(String s) =>
 
 /// 校验各部分取值（月 1-12、日不超过当月天数、时 0-23、分 0-59）
 bool dateTimePartsValid(String s) {
-  final m =
-      RegExp(r'^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$').firstMatch(s);
+  final m = RegExp(r'^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$').firstMatch(s);
   if (m == null) return false;
   final y = int.parse(m.group(1)!);
   final mo = int.parse(m.group(2)!);
@@ -58,6 +59,9 @@ class SmartField extends StatefulWidget {
     this.unit,
     this.unitIcon,
     this.maxLength = 16,
+    this.showCounter = true,
+    this.errorText,
+    this.enabled = true,
     this.formatters = const [],
     this.validator,
     this.onChanged,
@@ -71,6 +75,9 @@ class SmartField extends StatefulWidget {
   final String? unit;
   final IconData? unitIcon;
   final int maxLength;
+  final bool showCounter;
+  final String? errorText;
+  final bool enabled;
   final List<TextInputFormatter> formatters;
   final String? Function(String?)? validator;
   final ValueChanged<String>? onChanged;
@@ -103,6 +110,7 @@ class _SmartFieldState extends State<SmartField> {
     return TextFormField(
       controller: _ctrl,
       autofocus: widget.autofocus,
+      enabled: widget.enabled,
       keyboardType: widget.keyboardType ?? TextInputType.number,
       inputFormatters: [
         ...widget.formatters,
@@ -115,6 +123,8 @@ class _SmartFieldState extends State<SmartField> {
       },
       decoration: InputDecoration(
         labelText: widget.label,
+        errorText: widget.errorText,
+        errorMaxLines: 3,
         hintText: widget.hint,
         // 右侧常驻：单位 + 字数
         suffixIcon: Padding(
@@ -127,17 +137,18 @@ class _SmartFieldState extends State<SmartField> {
               if (widget.unitIcon != null && widget.unit != null)
                 const SizedBox(width: 4),
               if (widget.unit != null)
-                Text(widget.unit!,
-                    style: TextStyle(fontSize: 13, color: soft)),
-              const SizedBox(width: 8),
-              Text(
-                '${_ctrl.text.length}/${widget.maxLength}',
-                style: TextStyle(
+                Text(widget.unit!, style: TextStyle(fontSize: 13, color: soft)),
+              if (widget.showCounter) const SizedBox(width: 8),
+              if (widget.showCounter)
+                Text(
+                  '${_ctrl.text.length}/${widget.maxLength}',
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     fontFeatures: const [FontFeature.tabularFigures()],
-                    color: soft),
-              ),
+                    color: soft,
+                  ),
+                ),
             ],
           ),
         ),

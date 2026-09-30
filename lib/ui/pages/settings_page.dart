@@ -10,85 +10,122 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../data/db.dart';
+import '../../data/seed_data.dart';
 import '../../logic/calc.dart';
 import '../../logic/i18n.dart';
 import '../../logic/providers.dart';
 import '../dialogs.dart';
 import '../theme.dart';
+import '../widgets/app_segmented.dart';
 import '../widgets/lang_button.dart';
-import '../widgets/slide_to_confirm.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
-
   @override
   ConsumerState<SettingsPage> createState() => _SettingsPageState();
 }
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
+  // drift_flutter's default native database location is the documents directory.
+  late final Future<Directory> _dataDirectory =
+      getApplicationDocumentsDirectory();
+  bool _busyBackup = false;
+  bool _confirmingImport = false;
+  bool _savingGoal = false;
+  String? _backupResult;
   void _toast(String msg) {
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(content: Text(msg)));
     }
   }
 
-  Future<void> _saveGoal(String column, double? v) async {
-    await ref.read(dbProvider).saveProfile(
-          switch (column) {
-            'kcal' => ProfilesCompanion(id: const Value(1), kcalGoal: Value(v)),
-            'protein' =>
-              ProfilesCompanion(id: const Value(1), proteinGoal: Value(v)),
-            'fat' => ProfilesCompanion(id: const Value(1), fatGoal: Value(v)),
-            _ => ProfilesCompanion(id: const Value(1), carbGoal: Value(v)),
-          },
-        );
-  }
-
-  Future<void> _editGoal(
-      String title, String column, double? current, String suffix) async {
-    final v = await showNumberDialog(
-      context,
-      title: title,
-      initial: current == null ? null : round1(current).toString(),
-      suffix: suffix,
-      hint: tr(context, 'clearHint'),
-    );
-    if (v == null) return;
-    await _saveGoal(column, v <= 0 ? null : v);
+  Future<void> _saveGoal(String column, double? value) =>
+      ref.read(dbProvider).saveProfile(switch (column) {
+        'kcal' => ProfilesCompanion(id: const Value(1), kcalGoal: Value(value)),
+        'protein' => ProfilesCompanion(
+          id: const Value(1),
+          proteinGoal: Value(value),
+        ),
+        'fat' => ProfilesCompanion(id: const Value(1), fatGoal: Value(value)),
+        _ => ProfilesCompanion(id: const Value(1), carbGoal: Value(value)),
+      });
+  Future<void> _editGoal(String title, String column, double? current) async {
+    if (_savingGoal) return;
+    setState(() => _savingGoal = true);
+    final kj = column == 'kcal' && ref.read(settingsProvider).useKj;
+    final displayed = current == null
+        ? null
+        : kj
+        ? kcalToKj(current)
+        : current;
+    final initial = displayed == null ? null : round1(displayed).toString();
+    try {
+      final value = await showNumberDialog(
+        context,
+        title: title,
+        initial: initial,
+        suffix: column == 'kcal' ? energyUnit(kj) : 'g',
+        hint: tr(context, 'clearHint'),
+        allowClear: true,
+      );
+      if (value == null || !mounted) return;
+      // Preserve a stored value when its rounded display was left unchanged.
+      final stored = value == 0
+          ? null
+          : current != null && value == double.tryParse(initial!)
+          ? current
+          : kj
+          ? kjToKcal(value)
+          : value;
+      await _saveGoal(column, stored);
+      if (mounted) _toast(tr(context, 'goalSaved'));
+    } catch (_) {
+      if (mounted) _toast(tr(context, 'saveFail'));
+    } finally {
+      if (mounted) setState(() => _savingGoal = false);
+    }
   }
 
   Future<void> _export() async {
-    // await 之后不允许再用 context 取文案，提前快照语言
+    if (_busyBackup) return;
+    setState(() => _busyBackup = true);
     final lang = LangScope.of(context);
     try {
-      final db = ref.read(dbProvider);
-      final jsonStr = const JsonEncoder.withIndent('  ').convert(await db.exportJson());
+      final data = const JsonEncoder.withIndent('  ')
+          .convert(await ref.read(dbProvider).exportJson());
       final name = 'kcallog-backup-${dateKey(DateTime.now())}.json';
-      String? savedPath;
+      final mobile = Platform.isAndroid || Platform.isIOS;
+      String? path;
       try {
-        savedPath = await FilePicker.platform.saveFile(
+        path = await FilePicker.platform.saveFile(
           fileName: name,
-          bytes: Uint8List.fromList(utf8.encode(jsonStr)),
+          type: FileType.custom,
+          allowedExtensions: ['json'],
+          bytes: mobile ? Uint8List.fromList(utf8.encode(data)) : null,
         );
-      } catch (_) {
-        savedPath = null; // iOS 等平台不支持另存为
+        // A cancelled picker never creates an unexpected fallback backup.
+        if (path == null) return;
+        if (!mobile) await File(path).writeAsString(data, flush: true);
+      } on UnsupportedError {
+        final directory = await getApplicationDocumentsDirectory();
+        path = '${directory.path}/$name';
+        await File(path).writeAsString(data, flush: true);
       }
-      if (savedPath != null) {
-        _toast(t(lang, 'exportedTo', {'p': savedPath}));
-        return;
+      if (mounted) {
+        setState(() => _backupResult = t(lang, 'exportedTo', {'p': path!}));
       }
-      final dir = await getApplicationDocumentsDirectory();
-      final file = File('${dir.path}/$name');
-      await file.writeAsString(jsonStr);
-      await Clipboard.setData(ClipboardData(text: file.path));
-      _toast(
-          '${t(lang, 'exportedTo', {'p': file.path})}\n${t(lang, 'pathCopied')}');
-    } catch (e) {
-      _toast('${t(lang, 'exportFail')}: $e');
+    } catch (_) {
+      _toast(t(lang, 'exportFail'));
+    } finally {
+      if (mounted) setState(() => _busyBackup = false);
     }
   }
 
   Future<void> _import() async {
+    if (_busyBackup) return;
+    setState(() => _busyBackup = true);
     final lang = LangScope.of(context);
     try {
       final picked = await FilePicker.platform.pickFiles(
@@ -98,300 +135,509 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       );
       if (picked == null || !mounted) return;
       final file = picked.files.single;
-      Uint8List? bytes = file.bytes;
-      if (bytes == null && file.path != null) {
-        bytes = await File(file.path!).readAsBytes();
-      }
+      final bytes =
+          file.bytes ??
+          (file.path == null ? null : await File(file.path!).readAsBytes());
       if (bytes == null) {
         _toast(t(lang, 'readFail'));
         return;
       }
       final json = jsonDecode(utf8.decode(bytes));
-      if (json is! Map<String, dynamic> || json['app'] != 'kcal_log') {
+      if (json is! Map<String, dynamic> ||
+          json['app'] != 'kcal_log' ||
+          json['schema'] != 1 ||
+          ![
+            'foods',
+            'entries',
+            'weights',
+            'waters',
+            'templates',
+            'templateItems',
+          ].every((key) => json[key] is List) ||
+          (json['profile'] != null &&
+              json['profile'] is! Map<String, dynamic>)) {
         _toast(t(lang, 'notBackup'));
         return;
       }
       if (!mounted) return;
+      setState(() => _confirmingImport = true);
       final ok = await showDialog<bool>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: Text(t(lang, 'importConfirmTitle')),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(t(lang, 'importConfirmBody')),
-              const SizedBox(height: 16),
-              // 覆盖导入不可逆：滑动 80% 确认，不足回弹
-              SlideToConfirm(
-                label: t(lang, 'slideImportLabel'),
-                successLabel: t(lang, 'overwriteImport'),
-                onConfirm: () => Navigator.pop(dialogContext, true),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                child: Text(t(lang, 'cancel'))),
-          ],
+        builder: (_) => _BackupConfirmDialog(
+          name: file.name,
+          foods: (json['foods'] as List).length,
+          entries: (json['entries'] as List).length,
         ),
       );
-      if (ok != true) return;
-      await ref.read(dbProvider).importJson(json);
+      if (mounted) setState(() => _confirmingImport = false);
+      if (ok != true || !mounted) return;
+      final db = ref.read(dbProvider);
+      await db.transaction(() async {
+        await db.importJson(json);
+        await backfillBuiltInFoodCategories(db);
+      });
       ref.invalidate(entriesProvider);
       ref.invalidate(entriesRangeProvider);
       ref.invalidate(profileProvider);
       ref.invalidate(weightsProvider);
       ref.invalidate(waterProvider);
       ref.invalidate(templatesProvider);
-      _toast(t(lang, 'importDone'));
-    } catch (e) {
-      _toast('${t(lang, 'importFail')}: $e');
+      if (mounted) setState(() => _backupResult = t(lang, 'importDone'));
+    } catch (_) {
+      _toast(t(lang, 'importFail'));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busyBackup = false;
+          _confirmingImport = false;
+        });
+      }
     }
+  }
+
+  Future<void> _editWater(int current) async {
+    final value = await showNumberDialog(
+      context,
+      title: tr(context, 'waterGoal'),
+      initial: '$current',
+      suffix: 'ml',
+      minimum: 1,
+      maximum: 20000,
+    );
+    if (value == null || !mounted) return;
+    if (value.round() <= 0) {
+      _toast(tr(context, 'invalidWater'));
+      return;
+    }
+    ref.read(settingsProvider.notifier).setWaterGoal(value.round());
   }
 
   @override
   Widget build(BuildContext context) {
     final profile = ref.watch(profileProvider).valueOrNull;
     final settings = ref.watch(settingsProvider);
-
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    Widget goal(
+      String column,
+      String label,
+      double? value,
+      IconData icon,
+      Color color, {
+      String? fallback,
+    }) => _SettingsRow(
+      key: ValueKey('goal-$column'),
+      icon: icon,
+      color: color,
+      title: label,
+      detail: value == null
+          ? fallback ?? tr(context, 'goalUnset')
+          : column == 'kcal'
+          ? '${fmtEnergy(value, settings.useKj)} ${energyUnit(settings.useKj)}'
+          : '${round1(value)} g',
+      onTap: _savingGoal ? null : () => _editGoal(label, column, value),
+    );
     return Scaffold(
       appBar: AppBar(
         title: Text(tr(context, 'tabSettings')),
         actions: const [LangButton()],
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-        children: [
-          _sectionTitle(tr(context, 'secGoals')),
-          Card(
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.local_fire_department_outlined),
-                  title: Text(tr(context, 'kcalGoalRow')),
-                  subtitle: Text(
-                    profile?.kcalGoal == null
-                        ? tr(context, 'goalUnset')
-                        : '${round1(profile!.kcalGoal!)} kcal',
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _editGoal(tr(context, 'kcalGoalRow'), 'kcal',
-                      profile?.kcalGoal, 'kcal'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.egg_outlined),
-                  title: Text(tr(context, 'proteinGoal')),
-                  subtitle: Text(profile?.proteinGoal == null
-                      ? tr(context, 'unsetDefault', {'p': '20'})
-                      : '${round1(profile!.proteinGoal!)} g'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _editGoal(tr(context, 'proteinGoal'),
-                      'protein', profile?.proteinGoal, 'g'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.opacity_outlined),
-                  title: Text(tr(context, 'fatGoal')),
-                  subtitle: Text(profile?.fatGoal == null
-                      ? tr(context, 'unsetDefault', {'p': '25'})
-                      : '${round1(profile!.fatGoal!)} g'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _editGoal(
-                      tr(context, 'fatGoal'), 'fat', profile?.fatGoal, 'g'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.grain),
-                  title: Text(tr(context, 'carbGoal')),
-                  subtitle: Text(profile?.carbGoal == null
-                      ? tr(context, 'unsetDefault', {'p': '55'})
-                      : '${round1(profile!.carbGoal!)} g'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _editGoal(
-                      tr(context, 'carbGoal'), 'carb', profile?.carbGoal, 'g'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.person_outline),
-                  title: Text(tr(context, 'estimateByProfile')),
-                  subtitle: Text(tr(context, 'profileSub')),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => showDialog(
-                      context: context,
-                      builder: (_) => _ProfileDialog(profile: profile)),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          _sectionTitle(tr(context, 'secAppearance')),
-          Card(
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.bolt_outlined),
-                  title: Text(tr(context, 'useKj')),
-                  subtitle: Text(tr(context, 'useKjSub')),
-                  trailing: CupertinoSwitch(
-                    value: settings.useKj,
-                    onChanged: ref.read(settingsProvider.notifier).setUseKj,
-                  ),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.dark_mode_outlined),
-                  title: Text(tr(context, 'appearance')),
-                  trailing: CupertinoSlidingSegmentedControl<ThemeMode>(
-                    groupValue: settings.themeMode,
-                    onValueChanged: (m) => ref
-                        .read(settingsProvider.notifier)
-                        .setThemeMode(m ?? ThemeMode.system),
-                    thumbColor: const CupertinoDynamicColor.withBrightness(
-                      color: Color(0xFFFFFFFF),
-                      darkColor: Color(0xFF636366),
-                    ),
-                    children: {
-                      ThemeMode.system: Padding(
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
-                        child: Text(tr(context, 'system'),
-                            style: const TextStyle(
-                                fontSize: 13, fontWeight: FontWeight.w500)),
-                      ),
-                      ThemeMode.light: Padding(
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
-                        child: Text(tr(context, 'light'),
-                            style: const TextStyle(
-                                fontSize: 13, fontWeight: FontWeight.w500)),
-                      ),
-                      ThemeMode.dark: Padding(
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
-                        child: Text(tr(context, 'dark'),
-                            style: const TextStyle(
-                                fontSize: 13, fontWeight: FontWeight.w500)),
-                      ),
-                    },
-                  ),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.local_drink_outlined),
-                  title: Text(tr(context, 'waterGoal')),
-                  subtitle: Text(
-                      tr(context, 'perDay', {'n': '${settings.waterGoalMl}'})),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () async {
-                    final v = await showNumberDialog(
-                      context,
-                      title: tr(context, 'waterGoal'),
-                      initial: settings.waterGoalMl.toString(),
-                      suffix: 'ml',
-                    );
-                    if (v != null && v > 0) {
-                      ref
-                          .read(settingsProvider.notifier)
-                          .setWaterGoal(v.round());
-                    }
-                  },
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          _sectionTitle(tr(context, 'secData')),
-          Card(
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.file_upload_outlined),
-                  title: Text(tr(context, 'exportTitle')),
-                  subtitle: Text(tr(context, 'exportSub')),
-                  onTap: _export,
-                ),
-                ListTile(
-                  leading: const Icon(Icons.file_download_outlined),
-                  title: Text(tr(context, 'importTitle')),
-                  subtitle: Text(tr(context, 'importSub')),
-                  onTap: _import,
-                ),
-                ListTile(
-                  leading: const Icon(Icons.folder_outlined),
-                  title: Text(tr(context, 'storageLoc')),
-                  subtitle: FutureBuilder<Directory>(
-                    future: getApplicationSupportDirectory(),
-                    builder: (context, snap) => Text(
-                      snap.data == null
-                          ? tr(context, 'appDataDir')
-                          : snap.data!.path,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          _sectionTitle(tr(context, 'secAbout')),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      body: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 960),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+            children: [
+              _Section(
+                title: tr(context, 'secGoals'),
+                subtitle: tr(context, 'goalsHelp'),
                 children: [
-                  Text('${tr(context, 'appName')} v0.1.0',
-                      style: Theme.of(context).textTheme.titleSmall),
-                  const SizedBox(height: 6),
-                  Text(
-                    tr(context, 'aboutBody'),
-                    style: Theme.of(context).textTheme.bodySmall,
+                  goal(
+                    'kcal',
+                    tr(context, 'kcalGoalRow'),
+                    profile?.kcalGoal,
+                    CupertinoIcons.flame,
+                    LabelColors.energyOf(dark),
+                  ),
+                  goal(
+                    'protein',
+                    tr(context, 'proteinGoal'),
+                    profile?.proteinGoal,
+                    CupertinoIcons.leaf_arrow_circlepath,
+                    LabelColors.proteinOf(dark),
+                    fallback: tr(context, 'unsetDefault', {'p': '20'}),
+                  ),
+                  goal(
+                    'fat',
+                    tr(context, 'fatGoal'),
+                    profile?.fatGoal,
+                    CupertinoIcons.drop,
+                    LabelColors.fatOf(dark),
+                    fallback: tr(context, 'unsetDefault', {'p': '25'}),
+                  ),
+                  goal(
+                    'carb',
+                    tr(context, 'carbGoal'),
+                    profile?.carbGoal,
+                    CupertinoIcons.circle_grid_3x3,
+                    LabelColors.carbOf(dark),
+                    fallback: tr(context, 'unsetDefault', {'p': '55'}),
+                  ),
+                  _SettingsRow(
+                    key: const ValueKey('profile-row'),
+                    icon: CupertinoIcons.person,
+                    title: tr(context, 'estimateByProfile'),
+                    detail: tr(context, 'profileSub'),
+                    onTap: () => showDialog(
+                      context: context,
+                      builder: (_) => _ProfileDialog(profile: profile),
+                    ),
                   ),
                 ],
               ),
-            ),
+              _Section(
+                title: tr(context, 'secAppearance'),
+                children: [
+                  _SettingsRow(
+                    icon: CupertinoIcons.bolt,
+                    title: tr(context, 'useKj'),
+                    detail: tr(context, 'useKjSub'),
+                    trailing: CupertinoSwitch(
+                      value: settings.useKj,
+                      onChanged: ref.read(settingsProvider.notifier).setUseKj,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          tr(context, 'appearance'),
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        const SizedBox(height: 12),
+                        AppSegmented<ThemeMode>(
+                          segments: [
+                            (ThemeMode.system, tr(context, 'system')),
+                            (ThemeMode.light, tr(context, 'light')),
+                            (ThemeMode.dark, tr(context, 'dark')),
+                          ],
+                          selected: settings.themeMode,
+                          onChanged: ref
+                              .read(settingsProvider.notifier)
+                              .setThemeMode,
+                        ),
+                      ],
+                    ),
+                  ),
+                  _SettingsRow(
+                    key: const ValueKey('water-goal-row'),
+                    icon: CupertinoIcons.drop,
+                    title: tr(context, 'waterGoal'),
+                    detail: tr(context, 'perDay', {
+                      'n': '${settings.waterGoalMl}',
+                    }),
+                    onTap: () => _editWater(settings.waterGoalMl),
+                  ),
+                ],
+              ),
+              _Section(
+                title: tr(context, 'secData'),
+                subtitle: tr(context, 'backupHelp'),
+                children: [
+                  _SettingsRow(
+                    key: const ValueKey('export-row'),
+                    icon: CupertinoIcons.square_arrow_up,
+                    title: tr(context, 'exportTitle'),
+                    detail: tr(context, 'exportSub'),
+                    onTap: _busyBackup ? null : _export,
+                  ),
+                  _SettingsRow(
+                    key: const ValueKey('import-row'),
+                    icon: CupertinoIcons.square_arrow_down,
+                    title: tr(context, 'importTitle'),
+                    detail: tr(context, 'importSub'),
+                    onTap: _busyBackup ? null : _import,
+                  ),
+                  if (_busyBackup && !_confirmingImport)
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(child: Text(tr(context, 'working'))),
+                        ],
+                      ),
+                    ),
+                  if (_backupResult != null)
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: SelectableText(
+                        _backupResult!,
+                        key: const ValueKey('backup-result'),
+                      ),
+                    ),
+                  FutureBuilder<Directory>(
+                    future: _dataDirectory,
+                    builder: (context, snap) {
+                      final path = snap.data == null
+                          ? null
+                          : '${snap.data!.path}/kcallog.sqlite';
+                      return Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              tr(context, 'storageLoc'),
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                            const SizedBox(height: 8),
+                            SelectableText(path ?? tr(context, 'appDataDir')),
+                            if (path != null)
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: TextButton.icon(
+                                  onPressed: () async {
+                                    await Clipboard.setData(
+                                      ClipboardData(text: path),
+                                    );
+                                    if (mounted) {
+                                      _toast(tr(this.context, 'pathCopied'));
+                                    }
+                                  },
+                                  icon: const Icon(
+                                    CupertinoIcons.doc_on_doc,
+                                    size: 18,
+                                  ),
+                                  label: Text(tr(context, 'copyPath')),
+                                ),
+                              ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+              _Section(
+                title: tr(context, 'secAbout'),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          '${tr(context, 'appName')} v0.1.0',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          tr(context, 'aboutBody'),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
-
-  Widget _sectionTitle(String text) => Padding(
-        padding: const EdgeInsets.only(left: 4, bottom: 8),
-        child: Text(text, style: captionStyle(context)),
-      );
 }
 
-/// 个人资料与 TDEE 估算
+class _Section extends StatelessWidget {
+  const _Section({required this.title, this.subtitle, required this.children});
+  final String title;
+  final String? subtitle;
+  final List<Widget> children;
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 20),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(title, style: Theme.of(context).textTheme.titleSmall),
+              if (subtitle != null) ...[
+                const SizedBox(height: 4),
+                Text(subtitle!, style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ],
+          ),
+        ),
+        Card(
+          child: Column(
+            children: [
+              for (var i = 0; i < children.length; i++) ...[
+                if (i > 0) const Divider(height: 1, indent: 16, endIndent: 16),
+                children[i],
+              ],
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _SettingsRow extends StatelessWidget {
+  const _SettingsRow({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.detail,
+    this.color,
+    this.onTap,
+    this.trailing,
+  });
+  final IconData icon;
+  final String title, detail;
+  final Color? color;
+  final VoidCallback? onTap;
+  final Widget? trailing;
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: onTap != null,
+    child: InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 22,
+              color: color ?? Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: 4),
+                  Text(detail, style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
+            ),
+            if (trailing != null) ...[
+              const SizedBox(width: 12),
+              trailing!,
+            ] else if (onTap != null) ...[
+              const SizedBox(width: 8),
+              const Icon(CupertinoIcons.chevron_right, size: 16),
+            ],
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _BackupConfirmDialog extends StatefulWidget {
+  const _BackupConfirmDialog({
+    required this.name,
+    required this.foods,
+    required this.entries,
+  });
+  final String name;
+  final int foods, entries;
+  @override
+  State<_BackupConfirmDialog> createState() => _BackupConfirmDialogState();
+}
+
+class _BackupConfirmDialogState extends State<_BackupConfirmDialog> {
+  bool _ack = false;
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(tr(context, 'importConfirmTitle')),
+    scrollable: true,
+    content: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(widget.name),
+        const SizedBox(height: 8),
+        Text(
+          tr(context, 'backupCounts', {
+            'foods': '${widget.foods}',
+            'entries': '${widget.entries}',
+          }),
+        ),
+        const SizedBox(height: 12),
+        Text(tr(context, 'importConfirmBody')),
+        const SizedBox(height: 8),
+        CheckboxListTile(
+          key: const ValueKey('import-ack'),
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          title: Text(
+            tr(context, 'acknowledgeImport'),
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          value: _ack,
+          onChanged: (v) => setState(() => _ack = v ?? false),
+        ),
+      ],
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context, false),
+        child: Text(tr(context, 'cancel')),
+      ),
+      FilledButton(
+        key: const ValueKey('confirm-import'),
+        style: FilledButton.styleFrom(
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+        onPressed: _ack ? () => Navigator.pop(context, true) : null,
+        child: Text(tr(context, 'overwriteImport')),
+      ),
+    ],
+  );
+}
+
 class _ProfileDialog extends ConsumerStatefulWidget {
   const _ProfileDialog({this.profile});
-
   final Profile? profile;
-
   @override
   ConsumerState<_ProfileDialog> createState() => _ProfileDialogState();
 }
 
 class _ProfileDialogState extends ConsumerState<_ProfileDialog> {
-  Sex? _sex;
-  ActivityLevel _activity = ActivityLevel.moderate;
-  late final TextEditingController _birthYear;
-  late final TextEditingController _height;
-  late final TextEditingController _weight;
-  bool _applyEstimate = true;
-
-  @override
-  void initState() {
-    super.initState();
-    final p = widget.profile;
-    _sex = p?.sex;
-    _activity = p?.activity ?? ActivityLevel.moderate;
-    _birthYear = TextEditingController(text: p?.birthYear?.toString());
-    _height = TextEditingController(text: p?.heightCm == null ? '' : round1(p!.heightCm!).toString());
-    _weight = TextEditingController(text: p?.weightKg == null ? '' : round1(p!.weightKg!).toString());
-    for (final c in [_birthYear, _height, _weight]) {
-      c.addListener(() => setState(() {}));
-    }
-  }
-
+  final _form = GlobalKey<FormState>();
+  late final _birthYear = TextEditingController(
+    text: widget.profile?.birthYear?.toString() ?? '',
+  );
+  late final _height = TextEditingController(
+    text: widget.profile?.heightCm == null
+        ? ''
+        : '${round1(widget.profile!.heightCm!)}',
+  );
+  late final _weight = TextEditingController(
+    text: widget.profile?.weightKg == null
+        ? ''
+        : '${round1(widget.profile!.weightKg!)}',
+  );
+  late Sex? _sex = widget.profile?.sex;
+  late ActivityLevel _activity =
+      widget.profile?.activity ?? ActivityLevel.moderate;
+  bool _applyEstimate = false, _saving = false, _attempted = false;
+  String? _error;
   @override
   void dispose() {
     _birthYear.dispose();
@@ -400,156 +646,268 @@ class _ProfileDialogState extends ConsumerState<_ProfileDialog> {
     super.dispose();
   }
 
-  double? get _tdee {
-    final year = int.tryParse(_birthYear.text.trim());
-    final h = double.tryParse(_height.text.trim());
-    final w = double.tryParse(_weight.text.trim());
-    return estimateTdee(
-      sex: _sex,
-      birthYear: year,
-      heightCm: h,
-      weightKg: w,
-      activity: _activity,
-    );
+  int? get _year => int.tryParse(_birthYear.text.trim());
+  double? get _h => double.tryParse(_height.text.trim());
+  double? get _w => double.tryParse(_weight.text.trim());
+  double? get _tdee => estimateTdee(
+    sex: _sex,
+    birthYear: _year,
+    heightCm: _h,
+    weightKg: _w,
+    activity: _activity,
+  );
+  String? _validYear(String? text) {
+    if (text == null || text.trim().isEmpty) return null;
+    final v = int.tryParse(text.trim());
+    final age = v == null ? null : DateTime.now().year - v;
+    return age == null || age < 10 || age > 100
+        ? tr(context, 'invalidYear')
+        : null;
+  }
+
+  String? _validMeasure(String? text, double max) {
+    if (text == null || text.trim().isEmpty) return null;
+    final v = double.tryParse(text.trim());
+    return v == null || !v.isFinite || v <= 0 || v > max
+        ? tr(context, 'validNumberRange', {
+            'max': '$max',
+            'unit': max == 300 ? 'cm' : 'kg',
+          })
+        : null;
+  }
+
+  void _changed() {
+    setState(() {
+      _error = null;
+      if (_tdee == null) _applyEstimate = false;
+    });
   }
 
   Future<void> _save() async {
-    final year = int.tryParse(_birthYear.text.trim());
-    final h = double.tryParse(_height.text.trim());
-    final w = double.tryParse(_weight.text.trim());
-    final db = ref.read(dbProvider);
-    await db.saveProfile(ProfilesCompanion(
-      id: const Value(1),
-      sex: Value(_sex),
-      birthYear: Value(year),
-      heightCm: Value(h),
-      weightKg: Value(w),
-      activity: Value(_activity),
-    ));
-    if (_applyEstimate && _tdee != null) {
-      final (p, f, c) = defaultMacroGoals(_tdee!);
-      await db.saveProfile(ProfilesCompanion(
-        id: const Value(1),
-        kcalGoal: Value(_tdee),
-        proteinGoal: Value(p),
-        fatGoal: Value(f),
-        carbGoal: Value(c),
-      ));
+    if (_saving) return;
+    setState(() => _attempted = true);
+    if (!_form.currentState!.validate()) return;
+    final estimate = _tdee;
+    if (_applyEstimate && estimate == null) {
+      setState(() => _error = tr(context, 'tdeeHint'));
+      return;
     }
-    if (mounted) Navigator.pop(context);
+    setState(() => _saving = true);
+    try {
+      final db = ref.read(dbProvider);
+      final macros = estimate == null ? null : defaultMacroGoals(estimate);
+      await db.transaction(() async {
+        await db.saveProfile(
+          ProfilesCompanion(
+            id: const Value(1),
+            sex: Value(_sex),
+            birthYear: Value(_year),
+            heightCm: Value(_h),
+            weightKg: Value(_w),
+            activity: Value(_activity),
+            kcalGoal: _applyEstimate ? Value(estimate) : const Value.absent(),
+            proteinGoal: _applyEstimate
+                ? Value(macros!.$1)
+                : const Value.absent(),
+            fatGoal: _applyEstimate ? Value(macros!.$2) : const Value.absent(),
+            carbGoal: _applyEstimate ? Value(macros!.$3) : const Value.absent(),
+          ),
+        );
+        if (_w != null) await db.addWeight(dateKey(DateTime.now()), _w!);
+      });
+      if (mounted) Navigator.pop(context);
+    } catch (_) {
+      if (mounted) setState(() => _error = tr(context, 'saveFail'));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final tdee = _tdee;
+    final estimate = _tdee;
+    final settings = ref.watch(settingsProvider);
+    final labels = ['actSedentary', 'actLight', 'actModerate', 'actHigh'];
     return AlertDialog(
       title: Text(tr(context, 'profileTitle')),
+      scrollable: true,
       content: SizedBox(
-        width: 400,
-        child: SingleChildScrollView(
+        width: 460,
+        child: Form(
+          key: _form,
+          autovalidateMode: _attempted
+              ? AutovalidateMode.onUserInteraction
+              : AutovalidateMode.disabled,
           child: Column(
-            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              CupertinoSlidingSegmentedControl<Sex>(
-                groupValue: _sex ?? Sex.male,
-                onValueChanged: (s) => setState(() => _sex = s),
-                thumbColor: const CupertinoDynamicColor.withBrightness(
-                  color: Color(0xFFFFFFFF),
-                  darkColor: Color(0xFF636366),
-                ),
-                children: {
-                  Sex.male: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 24),
-                    child: Text(tr(context, 'male'),
-                        style: const TextStyle(
-                            fontSize: 13, fontWeight: FontWeight.w500)),
-                  ),
-                  Sex.female: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 24),
-                    child: Text(tr(context, 'female'),
-                        style: const TextStyle(
-                            fontSize: 13, fontWeight: FontWeight.w500)),
-                  ),
-                },
+              Text(
+                tr(context, 'profileEditHelp'),
+                style: Theme.of(context).textTheme.bodySmall,
               ),
-              const SizedBox(height: 12),
-              Row(children: [
-                Expanded(
-                  child: TextField(
-                    controller: _birthYear,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                        labelText: tr(context, 'birthYear'),
-                        hintText: tr(context, 'eg1990')),
-                  ),
+              const SizedBox(height: 16),
+              Text(tr(context, 'sexLabel')),
+              const SizedBox(height: 8),
+              Semantics(
+                label: tr(context, 'sexLabel'),
+                child: DropdownButtonFormField<Sex>(
+                  key: const ValueKey('profile-sex'),
+                  initialValue: _sex,
+                  isExpanded: true,
+                  decoration: const InputDecoration(),
+                  hint: Text(tr(context, 'chooseSex')),
+                  items: [
+                    for (final s in Sex.values)
+                      DropdownMenuItem(
+                        value: s,
+                        child: Text(
+                          tr(context, s == Sex.male ? 'male' : 'female'),
+                        ),
+                      ),
+                  ],
+                  onChanged: _saving
+                      ? null
+                      : (s) {
+                          _sex = s;
+                          _changed();
+                        },
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: TextField(
-                    controller: _height,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration:
-                        InputDecoration(labelText: tr(context, 'heightCm')),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: TextField(
-                    controller: _weight,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration:
-                        InputDecoration(labelText: tr(context, 'weightKg')),
-                  ),
-                ),
-              ]),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<ActivityLevel>(
-                initialValue: _activity,
-                decoration:
-                    InputDecoration(labelText: tr(context, 'activityLevel')),
-                items: [
-                  DropdownMenuItem(
-                      value: ActivityLevel.sedentary,
-                      child: Text(tr(context, 'actSedentary'))),
-                  DropdownMenuItem(
-                      value: ActivityLevel.light,
-                      child: Text(tr(context, 'actLight'))),
-                  DropdownMenuItem(
-                      value: ActivityLevel.moderate,
-                      child: Text(tr(context, 'actModerate'))),
-                  DropdownMenuItem(
-                      value: ActivityLevel.high,
-                      child: Text(tr(context, 'actHigh'))),
-                ],
-                onChanged: (v) => setState(() => _activity = v ?? _activity),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
+              Text(tr(context, 'birthYear')),
+              const SizedBox(height: 8),
+              Semantics(
+                label: tr(context, 'birthYear'),
+                child: TextFormField(
+                  key: const ValueKey('profile-year'),
+                  controller: _birthYear,
+                  enabled: !_saving,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    hintText: tr(context, 'eg1990'),
+                    errorMaxLines: 12,
+                  ),
+                  validator: _validYear,
+                  onChanged: (_) => _changed(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(tr(context, 'heightCm')),
+              const SizedBox(height: 8),
+              Semantics(
+                label: tr(context, 'heightCm'),
+                child: TextFormField(
+                  key: const ValueKey('profile-height'),
+                  controller: _height,
+                  enabled: !_saving,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: InputDecoration(errorMaxLines: 12),
+                  validator: (v) => _validMeasure(v, 300),
+                  onChanged: (_) => _changed(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(tr(context, 'weightKg')),
+              const SizedBox(height: 8),
+              Semantics(
+                label: tr(context, 'weightKg'),
+                child: TextFormField(
+                  key: const ValueKey('profile-weight'),
+                  controller: _weight,
+                  enabled: !_saving,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration: InputDecoration(errorMaxLines: 12),
+                  validator: (v) => _validMeasure(v, 500),
+                  onChanged: (_) => _changed(),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(tr(context, 'activityLevel')),
+              const SizedBox(height: 8),
+              Semantics(
+                label: tr(context, 'activityLevel'),
+                child: DropdownButtonFormField<ActivityLevel>(
+                  key: const ValueKey('profile-activity'),
+                  initialValue: _activity,
+                  isExpanded: true,
+                  itemHeight: null,
+                  decoration: const InputDecoration(),
+                  selectedItemBuilder: (context) => [
+                    for (final a in ActivityLevel.values)
+                      Text(tr(context, '${labels[a.index]}Short')),
+                  ],
+                  items: [
+                    for (final a in ActivityLevel.values)
+                      DropdownMenuItem(
+                        value: a,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text(tr(context, labels[a.index])),
+                        ),
+                      ),
+                  ],
+                  onChanged: _saving
+                      ? null
+                      : (a) {
+                          if (a != null) {
+                            _activity = a;
+                            _changed();
+                          }
+                        },
+                ),
+              ),
+              const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .surfaceContainerHighest
-                      .withAlpha(120),
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Text(
-                  tdee == null
-                      ? tr(context, 'tdeeHint')
-                      : tr(context, 'tdeeIs', {'n': '${round1(tdee)}'}),
-                  style: Theme.of(context).textTheme.bodyMedium,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      estimate == null
+                          ? tr(context, 'tdeeHint')
+                          : tr(context, 'estimateValue', {
+                              'value':
+                                  '${fmtEnergy(estimate, settings.useKj)} ${energyUnit(settings.useKj)}',
+                            }),
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      tr(context, 'estimateHint'),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 8),
-              if (tdee != null)
+              if (estimate != null) ...[
+                const SizedBox(height: 12),
+                Text(tr(context, 'applyEstimateGoals')),
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: Text(tr(context, 'applyEstimate')),
+                  controlAffinity: ListTileControlAffinity.leading,
+                  key: const ValueKey('apply-estimate'),
+                  title: Text(
+                    tr(context, 'applyEstimateShort'),
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
                   value: _applyEstimate,
-                  onChanged: (v) => setState(() => _applyEstimate = v ?? true),
+                  onChanged: _saving
+                      ? null
+                      : (v) => setState(() => _applyEstimate = v ?? false),
+                ),
+              ],
+              if (_error != null)
+                Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
             ],
           ),
@@ -557,9 +915,14 @@ class _ProfileDialogState extends ConsumerState<_ProfileDialog> {
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(tr(context, 'cancel'))),
-        FilledButton(onPressed: _save, child: Text(tr(context, 'save'))),
+          onPressed: _saving ? null : () => Navigator.pop(context),
+          child: Text(tr(context, 'cancel')),
+        ),
+        FilledButton(
+          key: const ValueKey('save-profile'),
+          onPressed: _saving ? null : _save,
+          child: Text(tr(context, 'save')),
+        ),
       ],
     );
   }
