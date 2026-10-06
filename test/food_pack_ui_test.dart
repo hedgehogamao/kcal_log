@@ -199,6 +199,44 @@ void main() {
   }
 
   packTestWidgets(
+    '5000 JSON loads through existing App picker preview confirm and normal search',
+    (t) async {
+      final raw = jsonDecode(
+        File('food-packs/common-foods-5000.json').readAsStringSync(),
+      ) as Map<String, dynamic>;
+      final newName = ((raw['foods'] as List)[1000] as Map)['name'] as String;
+      await open(t);
+      picker.file(raw);
+      await pick(t);
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(await db.foodCount(), 1000);
+      await t.tap(find.text(tText(AppLang.zh, 'cancel')));
+      await t.pumpAndSettle();
+      expect(await db.foodCount(), 1000);
+      await pick(t);
+      await t.tap(find.byKey(const ValueKey('food-pack-apply')));
+      await t.pumpAndSettle();
+      expect(await db.foodCount(), 5000);
+      expect((await db.select(db.foodCatalogs).get()).single.revision, 3);
+      await pick(t);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.text(tText(AppLang.zh, 'packCurrent')), findsOneWidget);
+      await t.pageBack();
+      await t.pumpAndSettle();
+      await t.enterText(find.byType(TextField).first, newName);
+      await t.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byType(FoodListItem),
+          matching: find.text(newName),
+        ),
+        findsOneWidget,
+      );
+      expect(t.takeException(), isNull);
+    },
+  );
+
+  packTestWidgets(
     'invalid pack and picker cancel leave foods and metadata unchanged',
     (t) async {
       await open(t);

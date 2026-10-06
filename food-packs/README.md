@@ -7,6 +7,15 @@ App **首次需要安装含加载器的新版本**；已发布的 v0.1.1 尚不�
 
 ## 提供的包
 
+- **`common-foods-5000.json`：最新 5000 条独立数据包，数据修订 3。**
+  保留修订 2 的全部 1000 条和稳定 ID，新增 4000 条 USDA SR Legacy 真实记录。
+  v0.1.2 已支持加载：下载这个 JSON → 设置 → 数据 → 食物数据包 → 预览 → 确认。
+  不改变 App 版本，也不改变其 1000 条内置库。正常未改动的库导入后为 5000 条；
+  个人修改、自建、删除和同名冲突仍受保护，实际条数可能不是恰好 5000。
+  `common-foods-5000.sources.json` 仅是来源说明，不能作为食物包导入。
+  中文前缀是食物关键词或分类提示，不是完整翻译；英文完整保留品牌、生熟、部位和加工状态。
+  排除婴幼儿食品及非食物控制材料，不把缺失营养值当作 0，不编造营养数值。
+  复现：`python3 tool/build_5000_foods.py USDA_ZIP`；生成器不改动原 237/1000 条文件或 App 源码。
 - **`common-foods-1000.json`：正式 1000 条数据包，数据修订 2。**
   保留原有 237 条及 ID，新增 763 条 USDA FoodData Central SR Legacy 记录。
   同时已编译进 App 内置库：新安装直接有 1000 条；旧库升级只新增条目，
@@ -84,6 +93,7 @@ Protein（1003）、Total lipid（1004）、Carbohydrate by difference（1005）
 
 ```sh
 flutter test test/food_pack_test.dart test/food_pack_ui_test.dart
+flutter test test/food_pack_5000_test.dart
 flutter test tool/export_food_pack_test.dart
 flutter analyze
 ```
