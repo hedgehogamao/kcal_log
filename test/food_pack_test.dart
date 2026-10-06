@@ -296,7 +296,6 @@ void main() {
   test(
     'v2 database gains pack table without losing personal rows or snapshots',
     () async {
-      await db.close();
       final dir = await Directory.systemTemp.createTemp('kcal-pack-migration-');
       addTearDown(() => dir.delete(recursive: true));
       final path = '${dir.path}/old.sqlite';
@@ -316,7 +315,8 @@ void main() {
       await old.customStatement('PRAGMA user_version = 2');
       await old.close();
       final upgraded = AppDatabase.forTesting(NativeDatabase(File(path)));
-      db = upgraded;
+      // Test-local cleanups run in reverse order: close SQLite before deleting its directory.
+      addTearDown(upgraded.close);
       expect((await upgraded.searchFoods('personal')).single.kcal100, 333);
       expect((await upgraded.watchEntries('2026-09-30').first).single.kcal, 42);
       expect(await upgraded.select(upgraded.foodCatalogs).get(), isEmpty);
