@@ -4,6 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'db.dart';
 import '../logic/food_category.dart';
 
+part 'seed_data_expanded.dart';
+
 /// 内置常见食物种子数据（每 100 g；数值为常见估算值，用户可随时编辑）
 class SeedFood {
   const SeedFood(
@@ -23,7 +25,7 @@ class SeedFood {
 
 const _s = SeedFood.new;
 
-final List<SeedFood> kSeedFoods = [
+final List<SeedFood> kLegacySeedFoods = [
   // 主食
   _s('米饭', 116, 2.6, 0.3, 25.9, servingDesc: '1碗', servingGrams: 200),
   _s('白粥', 46, 1.1, 0.3, 9.9, servingDesc: '1碗', servingGrams: 250),
@@ -277,8 +279,20 @@ final List<SeedFood> kSeedFoods = [
   _s('三明治(鸡蛋)', 220, 9.0, 9.0, 26.0, servingDesc: '1份', servingGrams: 180),
 ];
 
-// These boundary names mirror the contiguous sections above. Keeping category
-// metadata separate leaves all 237 nutritional records unchanged.
+final List<SeedFood> kSeedFoods = [
+  ...kLegacySeedFoods,
+  ...kExpandedSeedFoods.map((row) => row.$1),
+];
+
+/// Stable IDs for independent food packs; legacy IDs and all legacy values stay
+/// unchanged, while new records retain their official USDA FDC identity.
+final Map<String, String> seedFoodPackIds = {
+  for (final food in kLegacySeedFoods) food.name: food.name,
+  for (final row in kExpandedSeedFoods) row.$1.name: row.$3,
+};
+
+// Boundary metadata applies only to the original 237 records. New records have
+// explicit categories, never the category of the preceding array item.
 const _categoryStarts = <String, FoodCategory>{
   '米饭': FoodCategory.staple,
   '鸡蛋': FoodCategory.protein,
@@ -295,51 +309,66 @@ const _categoryStarts = <String, FoodCategory>{
 final Map<String, FoodCategory> seedFoodCategories = () {
   var category = FoodCategory.other;
   final result = <String, FoodCategory>{};
-  for (final food in kSeedFoods) {
+  for (final food in kLegacySeedFoods) {
     category = _categoryStarts[food.name] ?? category;
     result[food.name] = category;
+  }
+  for (final row in kExpandedSeedFoods) {
+    result[row.$1.name] = row.$2;
   }
   return result;
 }();
 
 /// 首次安装写入全部内置食物；版本升级时只补充缺失名称。
 /// 不覆盖用户修改过的食物，也不在每次启动时重新添加用户删除的食物。
-const _catalogVersion = 2;
+const _catalogVersion = 3;
 const _catalogVersionKey = 'builtinFoodCatalogVersion';
 
 Future<void> seedIfEmpty(AppDatabase db) async {
   final prefs = await SharedPreferences.getInstance();
   await backfillBuiltInFoodCategories(db);
-  if ((prefs.getInt(_catalogVersionKey) ?? 0) >= _catalogVersion &&
-      await db.foodCount() > 0) {
+  final previousVersion = prefs.getInt(_catalogVersionKey) ?? 0;
+  if (previousVersion >= _catalogVersion) {
     return;
   }
 
   final existingNames = (await db.select(db.foods).get())
-      .map((food) => food.name)
+      .map(
+        (food) =>
+            food.name.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' '),
+      )
       .toSet();
-  final missing = kSeedFoods.where(
-    (food) => !existingNames.contains(food.name),
+  // A v2 library has already offered all 237 legacy rows. Only add the new 763,
+  // rather than resurrecting legacy foods the user deliberately deleted.
+  final candidates = previousVersion >= 2
+      ? kExpandedSeedFoods.map((row) => row.$1)
+      : kSeedFoods;
+  final missing = candidates.where(
+    (food) => !existingNames.contains(
+      food.name.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' '),
+    ),
   );
-  await db.batch((batch) {
-    batch.insertAll(
-      db.foods,
-      missing
-          .map(
-            (food) => FoodsCompanion.insert(
-              name: food.name,
-              source: const Value('builtin'),
-              category: Value(seedFoodCategories[food.name]!.code),
-              kcal100: food.kcal,
-              protein100: Value(food.protein),
-              fat100: Value(food.fat),
-              carb100: Value(food.carb),
-              servingDesc: Value(food.servingDesc),
-              servingGrams: Value(food.servingGrams),
-            ),
-          )
-          .toList(),
-    );
+  await db.transaction(() async {
+    await db.batch((batch) {
+      batch.insertAll(
+        db.foods,
+        missing
+            .map(
+              (food) => FoodsCompanion.insert(
+                name: food.name,
+                source: const Value('builtin'),
+                category: Value(seedFoodCategories[food.name]!.code),
+                kcal100: food.kcal,
+                protein100: Value(food.protein),
+                fat100: Value(food.fat),
+                carb100: Value(food.carb),
+                servingDesc: Value(food.servingDesc),
+                servingGrams: Value(food.servingGrams),
+              ),
+            )
+            .toList(),
+      );
+    });
   });
   await prefs.setInt(_catalogVersionKey, _catalogVersion);
 }
@@ -347,9 +376,11 @@ Future<void> seedIfEmpty(AppDatabase db) async {
 /// Also run after backup import: old backups do not contain the category field.
 /// Explicit "Other" choices, edited names, and user-created foods stay untouched.
 Future<void> backfillBuiltInFoodCategories(AppDatabase db) async {
-  final builtins = await (db.select(db.foods)
-        ..where((f) => f.source.equals('builtin') & f.category.equals('legacy')))
-      .get();
+  final builtins =
+      await (db.select(db.foods)..where(
+            (f) => f.source.equals('builtin') & f.category.equals('legacy'),
+          ))
+          .get();
   if (builtins.isEmpty) return;
   await db.batch((batch) {
     for (final food in builtins) {

@@ -8,17 +8,24 @@ import 'package:kcal_log/data/db.dart';
 
 void main() {
   test('v1 food rows survive category-column migration', () async {
-    final dir = await Directory.systemTemp.createTemp('kcal-category-migration-');
+    final dir = await Directory.systemTemp.createTemp(
+      'kcal-category-migration-',
+    );
     addTearDown(() => dir.delete(recursive: true));
     final path = '${dir.path}/old.sqlite';
     final old = AppDatabase.forTesting(NativeDatabase(File(path)));
-    await old.into(old.foods).insert(FoodsCompanion.insert(
-      name: '米饭',
-      kcal100: 999,
-      source: const Value('builtin'),
-    ));
+    await old
+        .into(old.foods)
+        .insert(
+          FoodsCompanion.insert(
+            name: '米饭',
+            kcal100: 999,
+            source: const Value('builtin'),
+          ),
+        );
     // Recreate the v1 schema shape and version on disk before reopening.
     await old.customStatement('ALTER TABLE foods DROP COLUMN category');
+    await old.customStatement('DROP TABLE food_catalogs');
     await old.customStatement('PRAGMA user_version = 1');
     await old.close();
 

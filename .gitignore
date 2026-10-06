@@ -53,3 +53,4 @@ app.*.map.json
 !/verification/redesign_20260929/
 /verification/redesign_20260929/*
 !/verification/redesign_20260929/.gitkeep
+.gstack/

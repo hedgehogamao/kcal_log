@@ -301,7 +301,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('食物库'));
     await tester.pumpAndSettle();
-    expect(find.text('237 种食物'), findsOneWidget);
+    expect(find.text('1000 种食物'), findsOneWidget);
     expect(tester.takeException(), isNull);
     Future<void> capture(String name) async {
       final bytes = await tester.runAsync(() async {
@@ -317,16 +317,18 @@ void main() {
     await capture('food_library_latest');
     await tester.enterText(find.byType(TextField).first, '水果 苹果');
     await tester.pumpAndSettle();
-    expect(find.text('1 种食物'), findsOneWidget);
+    final appleResults = await previewDb.searchFoods('水果 苹果');
+    expect(appleResults.length, greaterThan(1));
+    expect(find.text('${appleResults.length} 种食物'), findsOneWidget);
     expect(find.text('苹果'), findsOneWidget);
     await capture('food_search_latest');
     await tester.tap(find.byTooltip('清除搜索'));
     await tester.pumpAndSettle();
-    expect(find.text('237 种食物'), findsOneWidget);
+    expect(find.text('1000 种食物'), findsOneWidget);
     tester.view.physicalSize = const Size(1280, 900);
     await tester.pumpAndSettle();
     expect(find.byType(NavigationRail), findsOneWidget);
-    expect(find.text('237 种食物'), findsOneWidget);
+    expect(find.text('1000 种食物'), findsOneWidget);
     await capture('food_library_desktop_latest');
     await tester.tap(find.byType(TextField).first);
     await tester.pumpAndSettle();
@@ -356,7 +358,7 @@ void main() {
       tester.widget<NavigationRail>(find.byType(NavigationRail)).selectedIndex,
       0,
     );
-    expect(await previewDb.foodCount(), 237);
+    expect(await previewDb.foodCount(), 1000);
     expect(await previewDb.recentEntries(), isEmpty);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
@@ -489,7 +491,7 @@ void main() {
   });
 
   testWidgets('最近列表开启 OFF 时切回全部并展示在线区', (tester) async {
-    final rice = (await db.searchFoods('米饭')).single;
+    final rice = (await db.searchFoods('米饭')).firstWhere((f) => f.name == '米饭');
     await db.addEntry(
       EntriesCompanion.insert(
         date: '2026-09-29',
@@ -796,9 +798,10 @@ void main() {
   });
 
   testWidgets('编辑已有食物忽略新建默认分类，并返回正确的保存对象', (tester) async {
-    var existing = (await db.searchFoods('米饭')).single;
+    var existing = (await db.searchFoods('米饭'))
+        .firstWhere((f) => f.name == '米饭');
     await db.toggleFavorite(existing);
-    existing = (await db.searchFoods('米饭')).single;
+    existing = (await db.searchFoods('米饭')).firstWhere((f) => f.name == '米饭');
     Food? returned;
     await tester.pumpWidget(
       ProviderScope(

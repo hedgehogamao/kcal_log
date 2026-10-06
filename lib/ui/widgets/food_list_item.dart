@@ -31,6 +31,7 @@ class FoodListItem extends StatelessWidget {
     final source = switch (food.source) {
       'off' => 'OFF',
       'builtin' => tr(context, 'sourceBuiltin'),
+      'pack' => tr(context, 'sourceFoodPack'),
       _ => tr(context, 'sourceCustom'),
     };
     final detail = [

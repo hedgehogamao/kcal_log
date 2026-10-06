@@ -48,6 +48,94 @@ class LangScope extends InheritedWidget {
 
 /// 文案表：(English, Español, 中文)
 const Map<String, (String, String, String)> kStrings = {
+  'foodPacks': ('Food packs', 'Paquetes de alimentos', '食物数据包'),
+  'sourceFoodPack': ('Food pack', 'Paquete', '数据包'),
+  'packHeadline': (
+    'Update foods, not the app',
+    'Actualiza alimentos, no la app',
+    '只更新食物，不更新 App',
+  ),
+  'packHelp': (
+    'Import a JSON food pack. Future packs work with this loader without another app release.',
+    'Importa un paquete JSON. Podrás cargar nuevos paquetes sin reinstalar la app.',
+    '导入 JSON 食物包。以后更换数据包即可添加或更正食物，无需再次安装新版 App。',
+  ),
+  'packPick': ('Choose food pack', 'Elegir paquete', '选择食物包'),
+  'packLimit': (
+    'Data only · JSON up to 5 MiB · no program code',
+    'Solo datos · JSON hasta 5 MiB · sin código',
+    '仅数据 · JSON 不超过 5 MiB · 不加载程序代码',
+  ),
+  'packInstalled': ('Installed packs', 'Paquetes instalados', '已加载的数据包'),
+  'packNone': (
+    'No packs yet. Your built-in foods are still available.',
+    'Aún no hay paquetes. Tus alimentos integrados siguen disponibles.',
+    '尚未加载数据包，原有内置食物仍可正常使用。',
+  ),
+  'packRevision': ('Data revision {n}', 'Revisión de datos {n}', '数据修订 {n}'),
+  'packPreview': ('Review food changes', 'Revisar cambios', '确认食物变更'),
+  'packAdded': ('Add {n} foods', 'Añadir {n} alimentos', '新增 {n} 条食物'),
+  'packUpdated': (
+    'Update {n} unchanged foods',
+    'Actualizar {n} sin cambios personales',
+    '更新 {n} 条未被个人修改的食物',
+  ),
+  'packProtected': (
+    'Keep {n} personal changes or conflicts',
+    'Conservar {n} cambios personales o conflictos',
+    '保留 {n} 条个人修改或同名冲突',
+  ),
+  'packUnchanged': (
+    'Leave {n} foods unchanged',
+    'Mantener {n} alimentos',
+    '无需变更 {n} 条食物',
+  ),
+  'packProtectHelp': (
+    'Your custom foods, edits, deletions, favorites and past diary entries stay safe. Foods absent from this pack are not deleted.',
+    'Se conservan alimentos propios, ediciones, eliminaciones, favoritos e historial. No se borran alimentos ausentes del paquete.',
+    '不会覆盖自建食物、个人修改或删除；保留收藏与历史记录。包中缺少的旧食物也不会被删除。',
+  ),
+  'packApply': ('Load pack', 'Cargar paquete', '加载数据包'),
+  'packResult': (
+    'Loaded: {a} added · {u} updated · {p} protected',
+    'Cargado: {a} nuevos · {u} actualizados · {p} protegidos',
+    '加载完成：新增 {a} · 更新 {u} · 保留个人修改 {p}',
+  ),
+  'packCurrent': (
+    'This data revision is already loaded.',
+    'Esta revisión ya está cargada.',
+    '这份数据修订已经加载，无需重复导入。',
+  ),
+  'packInvalid': (
+    'Invalid food pack. Check its format and finite nutritional values.',
+    'Paquete inválido. Revisa el formato y los valores nutricionales.',
+    '不是有效食物包，请检查格式、分类与营养数值。',
+  ),
+  'packTooLarge': (
+    'Food pack exceeds 5 MiB. Use a smaller file.',
+    'El paquete supera 5 MiB. Usa uno más pequeño.',
+    '食物包超过 5 MiB，请选择较小文件。',
+  ),
+  'packOlder': (
+    'An older data revision cannot replace the installed one.',
+    'Una revisión anterior no puede reemplazar la actual.',
+    '不能用旧修订覆盖已加载的新修订。',
+  ),
+  'packRevisionChanged': (
+    'This revision has different contents. Increase its revision number.',
+    'Esta revisión tiene otro contenido. Incrementa su número.',
+    '同一修订号的内容发生变化，请提高数据包的 revision。',
+  ),
+  'packStateInvalid': (
+    'Pack metadata is invalid. Restore a trusted backup.',
+    'Metadatos inválidos. Restaura una copia fiable.',
+    '数据包记录损坏，请恢复可信备份。',
+  ),
+  'packReadFail': (
+    'Could not read or load the pack. No partial changes were saved; please retry.',
+    'No se pudo cargar. No se guardaron cambios parciales; vuelve a intentarlo.',
+    '食物包读取或加载失败，未保存部分变更，请重试。',
+  ),
   'validNumberRange': (
     'Enter a finite number above 0 and at most {max} {unit}.',
     'Introduce un número finito mayor que 0 y hasta {max} {unit}.',

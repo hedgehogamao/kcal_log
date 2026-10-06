@@ -25,6 +25,9 @@ jobs:
       - name: Pub get
         run: flutter pub get
 
+      - name: Verify 1000-food catalog and independent food packs
+        run: flutter test --reporter expanded test/seed_data_test.dart test/expanded_catalog_test.dart test/food_pack_test.dart
+
       - name: Build (Release)
         run: flutter build windows --release
 

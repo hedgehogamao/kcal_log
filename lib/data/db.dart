@@ -17,7 +17,7 @@ class Foods extends Table {
   TextColumn get name => text()();
   TextColumn get brand => text().nullable()();
   TextColumn get barcode => text().nullable().unique()();
-  // custom / off / builtin
+  // custom / off / builtin / pack
   TextColumn get source => text().withDefault(const Constant('custom'))();
   // stable category code; existing databases default to 'other' on migration.
   TextColumn get category => text().withDefault(const Constant('other'))();
@@ -99,8 +99,30 @@ class TemplateItems extends Table {
   RealColumn get grams => real()();
 }
 
+/// Data-only food packs have their own revision, independent of app releases.
+/// Ownership snapshots survive backups and protect edits/deletions from updates.
+class FoodCatalogs extends Table {
+  TextColumn get packId => text()();
+  IntColumn get revision => integer()();
+  TextColumn get title => text()();
+  TextColumn get stateJson => text()();
+  DateTimeColumn get appliedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {packId};
+}
+
 @DriftDatabase(
-  tables: [Foods, Entries, Profiles, Weights, Waters, Templates, TemplateItems],
+  tables: [
+    Foods,
+    Entries,
+    Profiles,
+    Weights,
+    Waters,
+    Templates,
+    TemplateItems,
+    FoodCatalogs,
+  ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(driftDatabase(name: 'kcallog'));
@@ -108,7 +130,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -120,6 +142,7 @@ class AppDatabase extends _$AppDatabase {
           "UPDATE foods SET category = 'legacy' WHERE source = 'builtin'",
         );
       }
+      if (from < 3) await m.createTable(foodCatalogs);
     },
   );
 
@@ -418,10 +441,22 @@ class AppDatabase extends _$AppDatabase {
             },
           )
           .toList(),
+      'foodCatalogs': (await select(foodCatalogs).get())
+          .map(
+            (p) => {
+              'packId': p.packId,
+              'revision': p.revision,
+              'title': p.title,
+              'stateJson': p.stateJson,
+              'appliedAt': p.appliedAt.toIso8601String(),
+            },
+          )
+          .toList(),
     };
   }
 
   Future<void> importJson(Map<String, dynamic> json) => transaction(() async {
+    await delete(foodCatalogs).go();
     await delete(entries).go();
     await delete(templateItems).go();
     await delete(templates).go();
@@ -490,6 +525,21 @@ class AppDatabase extends _$AppDatabase {
               ),
             )
             .toList(),
+      );
+      // Older backups omit this optional field: preserve their foods, but don't
+      // guess ownership or overwrite them during a later pack import.
+      b.insertAll(
+        foodCatalogs,
+        ((json['foodCatalogs'] ?? []) as List).map((value) {
+          final m = value as Map<String, dynamic>;
+          return FoodCatalogsCompanion.insert(
+            packId: m['packId'] as String,
+            revision: m['revision'] as int,
+            title: m['title'] as String,
+            stateJson: m['stateJson'] as String,
+            appliedAt: DateTime.parse(m['appliedAt'] as String),
+          );
+        }).toList(),
       );
     });
   });

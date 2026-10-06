@@ -2916,6 +2916,370 @@ class TemplateItemsCompanion extends UpdateCompanion<TemplateItem> {
   }
 }
 
+class $FoodCatalogsTable extends FoodCatalogs
+    with TableInfo<$FoodCatalogsTable, FoodCatalog> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $FoodCatalogsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _packIdMeta = const VerificationMeta('packId');
+  @override
+  late final GeneratedColumn<String> packId = GeneratedColumn<String>(
+    'pack_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _revisionMeta = const VerificationMeta(
+    'revision',
+  );
+  @override
+  late final GeneratedColumn<int> revision = GeneratedColumn<int>(
+    'revision',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _stateJsonMeta = const VerificationMeta(
+    'stateJson',
+  );
+  @override
+  late final GeneratedColumn<String> stateJson = GeneratedColumn<String>(
+    'state_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _appliedAtMeta = const VerificationMeta(
+    'appliedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> appliedAt = GeneratedColumn<DateTime>(
+    'applied_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    packId,
+    revision,
+    title,
+    stateJson,
+    appliedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'food_catalogs';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<FoodCatalog> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('pack_id')) {
+      context.handle(
+        _packIdMeta,
+        packId.isAcceptableOrUnknown(data['pack_id']!, _packIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_packIdMeta);
+    }
+    if (data.containsKey('revision')) {
+      context.handle(
+        _revisionMeta,
+        revision.isAcceptableOrUnknown(data['revision']!, _revisionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_revisionMeta);
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_titleMeta);
+    }
+    if (data.containsKey('state_json')) {
+      context.handle(
+        _stateJsonMeta,
+        stateJson.isAcceptableOrUnknown(data['state_json']!, _stateJsonMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_stateJsonMeta);
+    }
+    if (data.containsKey('applied_at')) {
+      context.handle(
+        _appliedAtMeta,
+        appliedAt.isAcceptableOrUnknown(data['applied_at']!, _appliedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_appliedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {packId};
+  @override
+  FoodCatalog map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return FoodCatalog(
+      packId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pack_id'],
+      )!,
+      revision: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}revision'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      stateJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}state_json'],
+      )!,
+      appliedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}applied_at'],
+      )!,
+    );
+  }
+
+  @override
+  $FoodCatalogsTable createAlias(String alias) {
+    return $FoodCatalogsTable(attachedDatabase, alias);
+  }
+}
+
+class FoodCatalog extends DataClass implements Insertable<FoodCatalog> {
+  final String packId;
+  final int revision;
+  final String title;
+  final String stateJson;
+  final DateTime appliedAt;
+  const FoodCatalog({
+    required this.packId,
+    required this.revision,
+    required this.title,
+    required this.stateJson,
+    required this.appliedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['pack_id'] = Variable<String>(packId);
+    map['revision'] = Variable<int>(revision);
+    map['title'] = Variable<String>(title);
+    map['state_json'] = Variable<String>(stateJson);
+    map['applied_at'] = Variable<DateTime>(appliedAt);
+    return map;
+  }
+
+  FoodCatalogsCompanion toCompanion(bool nullToAbsent) {
+    return FoodCatalogsCompanion(
+      packId: Value(packId),
+      revision: Value(revision),
+      title: Value(title),
+      stateJson: Value(stateJson),
+      appliedAt: Value(appliedAt),
+    );
+  }
+
+  factory FoodCatalog.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return FoodCatalog(
+      packId: serializer.fromJson<String>(json['packId']),
+      revision: serializer.fromJson<int>(json['revision']),
+      title: serializer.fromJson<String>(json['title']),
+      stateJson: serializer.fromJson<String>(json['stateJson']),
+      appliedAt: serializer.fromJson<DateTime>(json['appliedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'packId': serializer.toJson<String>(packId),
+      'revision': serializer.toJson<int>(revision),
+      'title': serializer.toJson<String>(title),
+      'stateJson': serializer.toJson<String>(stateJson),
+      'appliedAt': serializer.toJson<DateTime>(appliedAt),
+    };
+  }
+
+  FoodCatalog copyWith({
+    String? packId,
+    int? revision,
+    String? title,
+    String? stateJson,
+    DateTime? appliedAt,
+  }) => FoodCatalog(
+    packId: packId ?? this.packId,
+    revision: revision ?? this.revision,
+    title: title ?? this.title,
+    stateJson: stateJson ?? this.stateJson,
+    appliedAt: appliedAt ?? this.appliedAt,
+  );
+  FoodCatalog copyWithCompanion(FoodCatalogsCompanion data) {
+    return FoodCatalog(
+      packId: data.packId.present ? data.packId.value : this.packId,
+      revision: data.revision.present ? data.revision.value : this.revision,
+      title: data.title.present ? data.title.value : this.title,
+      stateJson: data.stateJson.present ? data.stateJson.value : this.stateJson,
+      appliedAt: data.appliedAt.present ? data.appliedAt.value : this.appliedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FoodCatalog(')
+          ..write('packId: $packId, ')
+          ..write('revision: $revision, ')
+          ..write('title: $title, ')
+          ..write('stateJson: $stateJson, ')
+          ..write('appliedAt: $appliedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(packId, revision, title, stateJson, appliedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is FoodCatalog &&
+          other.packId == this.packId &&
+          other.revision == this.revision &&
+          other.title == this.title &&
+          other.stateJson == this.stateJson &&
+          other.appliedAt == this.appliedAt);
+}
+
+class FoodCatalogsCompanion extends UpdateCompanion<FoodCatalog> {
+  final Value<String> packId;
+  final Value<int> revision;
+  final Value<String> title;
+  final Value<String> stateJson;
+  final Value<DateTime> appliedAt;
+  final Value<int> rowid;
+  const FoodCatalogsCompanion({
+    this.packId = const Value.absent(),
+    this.revision = const Value.absent(),
+    this.title = const Value.absent(),
+    this.stateJson = const Value.absent(),
+    this.appliedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  FoodCatalogsCompanion.insert({
+    required String packId,
+    required int revision,
+    required String title,
+    required String stateJson,
+    required DateTime appliedAt,
+    this.rowid = const Value.absent(),
+  }) : packId = Value(packId),
+       revision = Value(revision),
+       title = Value(title),
+       stateJson = Value(stateJson),
+       appliedAt = Value(appliedAt);
+  static Insertable<FoodCatalog> custom({
+    Expression<String>? packId,
+    Expression<int>? revision,
+    Expression<String>? title,
+    Expression<String>? stateJson,
+    Expression<DateTime>? appliedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (packId != null) 'pack_id': packId,
+      if (revision != null) 'revision': revision,
+      if (title != null) 'title': title,
+      if (stateJson != null) 'state_json': stateJson,
+      if (appliedAt != null) 'applied_at': appliedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  FoodCatalogsCompanion copyWith({
+    Value<String>? packId,
+    Value<int>? revision,
+    Value<String>? title,
+    Value<String>? stateJson,
+    Value<DateTime>? appliedAt,
+    Value<int>? rowid,
+  }) {
+    return FoodCatalogsCompanion(
+      packId: packId ?? this.packId,
+      revision: revision ?? this.revision,
+      title: title ?? this.title,
+      stateJson: stateJson ?? this.stateJson,
+      appliedAt: appliedAt ?? this.appliedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (packId.present) {
+      map['pack_id'] = Variable<String>(packId.value);
+    }
+    if (revision.present) {
+      map['revision'] = Variable<int>(revision.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (stateJson.present) {
+      map['state_json'] = Variable<String>(stateJson.value);
+    }
+    if (appliedAt.present) {
+      map['applied_at'] = Variable<DateTime>(appliedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FoodCatalogsCompanion(')
+          ..write('packId: $packId, ')
+          ..write('revision: $revision, ')
+          ..write('title: $title, ')
+          ..write('stateJson: $stateJson, ')
+          ..write('appliedAt: $appliedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -2926,6 +3290,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $WatersTable waters = $WatersTable(this);
   late final $TemplatesTable templates = $TemplatesTable(this);
   late final $TemplateItemsTable templateItems = $TemplateItemsTable(this);
+  late final $FoodCatalogsTable foodCatalogs = $FoodCatalogsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -2938,6 +3303,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     waters,
     templates,
     templateItems,
+    foodCatalogs,
   ];
 }
 
@@ -4452,6 +4818,206 @@ typedef $$TemplateItemsTableProcessedTableManager =
       TemplateItem,
       PrefetchHooks Function()
     >;
+typedef $$FoodCatalogsTableCreateCompanionBuilder =
+    FoodCatalogsCompanion Function({
+      required String packId,
+      required int revision,
+      required String title,
+      required String stateJson,
+      required DateTime appliedAt,
+      Value<int> rowid,
+    });
+typedef $$FoodCatalogsTableUpdateCompanionBuilder =
+    FoodCatalogsCompanion Function({
+      Value<String> packId,
+      Value<int> revision,
+      Value<String> title,
+      Value<String> stateJson,
+      Value<DateTime> appliedAt,
+      Value<int> rowid,
+    });
+
+class $$FoodCatalogsTableFilterComposer
+    extends Composer<_$AppDatabase, $FoodCatalogsTable> {
+  $$FoodCatalogsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get packId => $composableBuilder(
+    column: $table.packId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get revision => $composableBuilder(
+    column: $table.revision,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get stateJson => $composableBuilder(
+    column: $table.stateJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get appliedAt => $composableBuilder(
+    column: $table.appliedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$FoodCatalogsTableOrderingComposer
+    extends Composer<_$AppDatabase, $FoodCatalogsTable> {
+  $$FoodCatalogsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get packId => $composableBuilder(
+    column: $table.packId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get revision => $composableBuilder(
+    column: $table.revision,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get stateJson => $composableBuilder(
+    column: $table.stateJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get appliedAt => $composableBuilder(
+    column: $table.appliedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$FoodCatalogsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $FoodCatalogsTable> {
+  $$FoodCatalogsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get packId =>
+      $composableBuilder(column: $table.packId, builder: (column) => column);
+
+  GeneratedColumn<int> get revision =>
+      $composableBuilder(column: $table.revision, builder: (column) => column);
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get stateJson =>
+      $composableBuilder(column: $table.stateJson, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get appliedAt =>
+      $composableBuilder(column: $table.appliedAt, builder: (column) => column);
+}
+
+class $$FoodCatalogsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $FoodCatalogsTable,
+          FoodCatalog,
+          $$FoodCatalogsTableFilterComposer,
+          $$FoodCatalogsTableOrderingComposer,
+          $$FoodCatalogsTableAnnotationComposer,
+          $$FoodCatalogsTableCreateCompanionBuilder,
+          $$FoodCatalogsTableUpdateCompanionBuilder,
+          (
+            FoodCatalog,
+            BaseReferences<_$AppDatabase, $FoodCatalogsTable, FoodCatalog>,
+          ),
+          FoodCatalog,
+          PrefetchHooks Function()
+        > {
+  $$FoodCatalogsTableTableManager(_$AppDatabase db, $FoodCatalogsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$FoodCatalogsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$FoodCatalogsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$FoodCatalogsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> packId = const Value.absent(),
+                Value<int> revision = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<String> stateJson = const Value.absent(),
+                Value<DateTime> appliedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => FoodCatalogsCompanion(
+                packId: packId,
+                revision: revision,
+                title: title,
+                stateJson: stateJson,
+                appliedAt: appliedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String packId,
+                required int revision,
+                required String title,
+                required String stateJson,
+                required DateTime appliedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => FoodCatalogsCompanion.insert(
+                packId: packId,
+                revision: revision,
+                title: title,
+                stateJson: stateJson,
+                appliedAt: appliedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$FoodCatalogsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $FoodCatalogsTable,
+      FoodCatalog,
+      $$FoodCatalogsTableFilterComposer,
+      $$FoodCatalogsTableOrderingComposer,
+      $$FoodCatalogsTableAnnotationComposer,
+      $$FoodCatalogsTableCreateCompanionBuilder,
+      $$FoodCatalogsTableUpdateCompanionBuilder,
+      (
+        FoodCatalog,
+        BaseReferences<_$AppDatabase, $FoodCatalogsTable, FoodCatalog>,
+      ),
+      FoodCatalog,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -4470,4 +5036,6 @@ class $AppDatabaseManager {
       $$TemplatesTableTableManager(_db, _db.templates);
   $$TemplateItemsTableTableManager get templateItems =>
       $$TemplateItemsTableTableManager(_db, _db.templateItems);
+  $$FoodCatalogsTableTableManager get foodCatalogs =>
+      $$FoodCatalogsTableTableManager(_db, _db.foodCatalogs);
 }

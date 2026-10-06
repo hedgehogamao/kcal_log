@@ -1,0 +1,8 @@
+{
+  "app": "kcal_log.food_pack",
+  "schema": 1,
+  "packId": "kcal-log.demo",
+  "revision": 1,
+  "title": "加载器演示（仅测试）",
+  "foods": [{"id": "demo-food", "name": "演示食物（仅测试）", "category": "other", "kcal100": 100, "protein100": 1, "fat100": 2, "carb100": 10}]
+}

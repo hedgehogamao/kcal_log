@@ -180,14 +180,17 @@ void main() {
       t.widget<FoodCategoryFilter>(find.byType(FoodCategoryFilter)).selected,
       FoodCategory.fruit,
     );
-    expect(find.text('1 项食物'), findsOneWidget);
+    expect(
+      find.text('${(await db.searchFoods('水果 苹果')).length} 项食物'),
+      findsOneWidget,
+    );
     await tap(t, find.byTooltip('清除分类'));
     expect(t.widget<TextField>(field).controller!.text, '水果 苹果');
     await tap(t, find.byTooltip('收藏'));
     expect(find.text('0 项食物'), findsOneWidget);
     await tap(t, find.byTooltip('收藏'));
     await tap(t, find.byTooltip('清除搜索'));
-    expect(find.text('237 项食物'), findsOneWidget);
+    expect(find.text('1000 项食物'), findsOneWidget);
     await t.enterText(field, '不存在xyz');
     await t.pumpAndSettle();
     await tap(t, find.text('清除搜索与筛选'));
@@ -519,8 +522,18 @@ void main() {
     await tap(t, find.text('食物'));
     await t.enterText(find.byType(TextField).first, '水果 苹果');
     await t.pumpAndSettle();
-    expect(find.byType(FoodListItem), findsOneWidget);
-    expect(await db.foodCount(), 237);
+    expect(find.byType(FoodListItem), findsWidgets);
+    expect(find.descendant(of: find.byType(FoodListItem), matching: find.text('苹果')), findsOneWidget);
+    final expectedAppleIds = (await db.searchFoods('水果 苹果'))
+        .map((f) => f.id)
+        .toSet();
+    expect(expectedAppleIds.length, greaterThan(1));
+    for (final widget in t.widgetList<FoodListItem>(
+      find.byType(FoodListItem),
+    )) {
+      expect(expectedAppleIds, contains(widget.food.id));
+    }
+    expect(await db.foodCount(), 1000);
     await capture(t, 'redesign_final_food_library');
     expect(t.takeException(), isNull);
     await drain(t);
@@ -564,7 +577,17 @@ void main() {
         '水果 苹果',
       );
       await t.pumpAndSettle();
-      expect(find.byType(FoodListItem), findsOneWidget);
+      expect(find.byType(FoodListItem), findsWidgets);
+      expect(find.descendant(of: find.byType(FoodListItem), matching: find.text('苹果')), findsOneWidget);
+      final expectedAppleIds = (await db.searchFoods('水果 苹果'))
+          .map((f) => f.id)
+          .toSet();
+      expect(expectedAppleIds.length, greaterThan(1));
+      for (final widget in t.widgetList<FoodListItem>(
+        find.byType(FoodListItem),
+      )) {
+        expect(expectedAppleIds, contains(widget.food.id));
+      }
       await capture(t, '${name}_search');
       expect(t.takeException(), isNull);
       await tap(

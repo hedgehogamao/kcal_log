@@ -498,7 +498,7 @@ void main() {
       File(picker.path!).readAsStringSync(),
     ) as Map<String, dynamic>;
     expect(backup['app'], 'kcal_log');
-    expect((backup['foods'] as List).length, 237);
+    expect((backup['foods'] as List).length, 1000);
     expect(picker.suppliedBytes, isNull);
     expect(find.byKey(const ValueKey('backup-result')), findsOneWidget);
     await drain(t);
@@ -516,7 +516,7 @@ void main() {
     expect(find.byKey(const ValueKey('backup-result')), findsOneWidget);
     await drain(t);
   });
-  testWidgets('导入有文件内容预览、明确确认和取消；保存后237分类仍在', (t) async {
+  testWidgets('导入有文件内容预览、明确确认和取消；保存后1000分类仍在', (t) async {
     final backup = await db.exportJson();
     await db.addEntry(
       EntriesCompanion.insert(
@@ -531,7 +531,7 @@ void main() {
     await reveal(t, find.byKey(const ValueKey('import-row')));
     await t.tap(find.byKey(const ValueKey('import-row')));
     await t.pumpAndSettle();
-    expect(find.text('237 条食物 · 0 条记录'), findsOneWidget);
+    expect(find.text('1000 条食物 · 0 条记录'), findsOneWidget);
     expect(
       t
           .widget<FilledButton>(find.byKey(const ValueKey('confirm-import')))
@@ -549,7 +549,7 @@ void main() {
     await t.pumpAndSettle();
     expect(await db.select(db.entries).get(), isEmpty);
     final foods = await db.select(db.foods).get();
-    expect(foods.length, 237);
+    expect(foods.length, 1000);
     expect(foods.every((f) => f.category != 'legacy'), isTrue);
     expect(find.text('导入完成'), findsOneWidget);
     await drain(t);
@@ -581,7 +581,7 @@ void main() {
     await t.pump();
     await t.tap(find.byKey(const ValueKey('confirm-import')));
     await t.pumpAndSettle();
-    expect((await db.select(db.foods).get()).length, 237);
+    expect((await db.select(db.foods).get()).length, 1000);
     expect((await db.select(db.entries).get()).single.kcal, 111);
     expect((await db.select(db.profiles).getSingle()).kcalGoal, 2000);
     expect(find.text('导入失败'), findsOneWidget);

@@ -14,6 +14,7 @@ import '../widgets/food_list_item.dart';
 import '../widgets/filter_pills.dart';
 import '../widgets/food_category_filter.dart';
 import '../widgets/top_tabs.dart';
+import 'food_packs_page.dart';
 
 class FoodsPage extends ConsumerStatefulWidget {
   const FoodsPage({super.key});
@@ -28,7 +29,19 @@ class _FoodsPageState extends ConsumerState<FoodsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(tr(context, 'tabFoods'))),
+      appBar: AppBar(
+        title: Text(tr(context, 'tabFoods')),
+        actions: [
+          IconButton(
+            key: const ValueKey('food-pack-open'),
+            tooltip: tr(context, 'foodPacks'),
+            icon: const Icon(Icons.inventory_2_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const FoodPacksPage()),
+            ),
+          ),
+        ],
+      ),
       body: TopTabs(
         tabs: [tr(context, 'foods'), tr(context, 'templates')],
         pageBuilder: (_, i) => Center(
@@ -48,7 +61,7 @@ class _FoodsPageState extends ConsumerState<FoodsPage> {
 }
 
 /// 食物来源筛选
-enum FoodSourceFilter { all, fav, builtin, custom, off }
+enum FoodSourceFilter { all, fav, builtin, custom, pack, off }
 
 class _FoodsTab extends ConsumerStatefulWidget {
   const _FoodsTab({required this.onQuery, required this.query});
@@ -94,7 +107,9 @@ class _FoodsTabState extends ConsumerState<_FoodsTab> {
         FoodSourceFilter.all => true,
         FoodSourceFilter.fav => f.favorite,
         FoodSourceFilter.builtin => f.source == 'builtin',
-        FoodSourceFilter.custom => f.source != 'builtin' && f.source != 'off',
+        FoodSourceFilter.custom =>
+          f.source != 'builtin' && f.source != 'off' && f.source != 'pack',
+        FoodSourceFilter.pack => f.source == 'pack',
         FoodSourceFilter.off => f.source == 'off',
       };
 
@@ -157,6 +172,7 @@ class _FoodsTabState extends ConsumerState<_FoodsTab> {
               (FoodSourceFilter.fav, tr(context, 'fav')),
               (FoodSourceFilter.builtin, tr(context, 'sourceBuiltin')),
               (FoodSourceFilter.custom, tr(context, 'sourceCustom')),
+              (FoodSourceFilter.pack, tr(context, 'sourceFoodPack')),
               (FoodSourceFilter.off, 'OFF'),
             ],
             selected: _source,
@@ -234,6 +250,10 @@ class _FoodsTabState extends ConsumerState<_FoodsTab> {
                   (food) => !food.favorite && food.source == 'builtin',
                 );
                 group('OFF', (food) => !food.favorite && food.source == 'off');
+                group(
+                  tr(context, 'sourceFoodPack'),
+                  (food) => !food.favorite && food.source == 'pack',
+                );
               } else {
                 rows.addAll(list);
               }

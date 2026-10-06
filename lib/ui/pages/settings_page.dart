@@ -18,6 +18,7 @@ import '../dialogs.dart';
 import '../theme.dart';
 import '../widgets/app_segmented.dart';
 import '../widgets/lang_button.dart';
+import 'food_packs_page.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -346,6 +347,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 title: tr(context, 'secData'),
                 subtitle: tr(context, 'backupHelp'),
                 children: [
+                  _SettingsRow(
+                    key: const ValueKey('food-pack-settings'),
+                    icon: Icons.inventory_2_outlined,
+                    title: tr(context, 'foodPacks'),
+                    detail: tr(context, 'packHeadline'),
+                    onTap: _busyBackup
+                        ? null
+                        : () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const FoodPacksPage(),
+                            ),
+                          ),
+                  ),
                   _SettingsRow(
                     key: const ValueKey('export-row'),
                     icon: CupertinoIcons.square_arrow_up,
