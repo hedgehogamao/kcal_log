@@ -7,6 +7,8 @@ import '../../logic/calc.dart';
 import '../../logic/i18n.dart';
 import '../../logic/providers.dart';
 import '../../logic/stats_summary.dart';
+import '../../logic/weekly_review.dart';
+import '../widgets/weekly_review_card.dart';
 import '../theme.dart';
 import '../widgets/app_segmented.dart';
 import '../widgets/charts.dart';
@@ -194,6 +196,11 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                     ],
                   ),
                 ),
+              ),
+              const SizedBox(height: 12),
+              WeeklyReviewCard(
+                review: WeeklyReview(heatEntries, today: now),
+                useKj: settings.useKj,
               ),
               const SizedBox(height: 12),
               Card(

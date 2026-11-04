@@ -438,7 +438,7 @@ void main() {
           dbProvider.overrideWithValue(db),
           prefsProvider.overrideWithValue(prefs),
         ],
-        child: const KcalLogApp(),
+        child: const KcalLogApp(animateGold: false),
       ),
     );
     await t.pumpAndSettle();
@@ -523,7 +523,10 @@ void main() {
     await t.enterText(find.byType(TextField).first, '水果 苹果');
     await t.pumpAndSettle();
     expect(find.byType(FoodListItem), findsWidgets);
-    expect(find.descendant(of: find.byType(FoodListItem), matching: find.text('苹果')), findsOneWidget);
+    expect(
+      find.descendant(of: find.byType(FoodListItem), matching: find.text('苹果')),
+      findsOneWidget,
+    );
     final expectedAppleIds = (await db.searchFoods('水果 苹果'))
         .map((f) => f.id)
         .toSet();
@@ -578,7 +581,13 @@ void main() {
       );
       await t.pumpAndSettle();
       expect(find.byType(FoodListItem), findsWidgets);
-      expect(find.descendant(of: find.byType(FoodListItem), matching: find.text('苹果')), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(FoodListItem),
+          matching: find.text('苹果'),
+        ),
+        findsOneWidget,
+      );
       final expectedAppleIds = (await db.searchFoods('水果 苹果'))
           .map((f) => f.id)
           .toSet();

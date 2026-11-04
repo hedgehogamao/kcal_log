@@ -21,7 +21,7 @@ final dbProvider = Provider<AppDatabase>((ref) {
 class AppSettings {
   const AppSettings({
     this.useKj = false,
-    this.themeMode = ThemeMode.system,
+    this.themeMode = ThemeMode.dark,
     this.waterGoalMl = 2000,
     this.lang = AppLang.zh,
   });
@@ -35,13 +35,12 @@ class AppSettings {
     ThemeMode? themeMode,
     int? waterGoalMl,
     AppLang? lang,
-  }) =>
-      AppSettings(
-        useKj: useKj ?? this.useKj,
-        themeMode: themeMode ?? this.themeMode,
-        waterGoalMl: waterGoalMl ?? this.waterGoalMl,
-        lang: lang ?? this.lang,
-      );
+  }) => AppSettings(
+    useKj: useKj ?? this.useKj,
+    themeMode: themeMode ?? this.themeMode,
+    waterGoalMl: waterGoalMl ?? this.waterGoalMl,
+    lang: lang ?? this.lang,
+  );
 }
 
 class SettingsNotifier extends Notifier<AppSettings> {
@@ -50,7 +49,8 @@ class SettingsNotifier extends Notifier<AppSettings> {
     final p = ref.watch(prefsProvider);
     return AppSettings(
       useKj: p.getBool('useKj') ?? false,
-      themeMode: ThemeMode.values[p.getInt('themeMode') ?? 0],
+      themeMode:
+          ThemeMode.values[p.getInt('themeMode') ?? ThemeMode.dark.index],
       waterGoalMl: p.getInt('waterGoalMl') ?? 2000,
       lang: appLangByCode(p.getString('lang')) ?? AppLang.zh,
     );
@@ -79,8 +79,9 @@ class SettingsNotifier extends Notifier<AppSettings> {
   }
 }
 
-final settingsProvider =
-    NotifierProvider<SettingsNotifier, AppSettings>(SettingsNotifier.new);
+final settingsProvider = NotifierProvider<SettingsNotifier, AppSettings>(
+  SettingsNotifier.new,
+);
 
 final profileProvider = StreamProvider<Profile?>(
   (ref) => ref.watch(dbProvider).watchProfile(),
@@ -94,8 +95,9 @@ final entriesProvider = StreamProvider.family<List<FoodEntry>, String>(
 /// [from, to] 闭区间内的记录（用于统计）
 final entriesRangeProvider =
     StreamProvider.family<List<FoodEntry>, (String, String)>(
-  (ref, range) => ref.watch(dbProvider).watchEntriesBetween(range.$1, range.$2),
-);
+      (ref, range) =>
+          ref.watch(dbProvider).watchEntriesBetween(range.$1, range.$2),
+    );
 
 final waterProvider = StreamProvider.family<WaterRec?, String>(
   (ref, date) => ref.watch(dbProvider).watchWater(date),

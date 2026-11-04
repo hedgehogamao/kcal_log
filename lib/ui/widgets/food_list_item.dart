@@ -5,6 +5,7 @@ import '../../logic/calc.dart';
 import '../../logic/food_category.dart';
 import '../../logic/i18n.dart';
 import '../theme.dart';
+import 'scroll_scale_reveal.dart';
 
 /// 搜索和食物库共用的信息卡：名称与热量优先，宏量营养不再挤在一行里。
 class FoodListItem extends StatelessWidget {
@@ -15,6 +16,8 @@ class FoodListItem extends StatelessWidget {
     this.onFavorite,
     this.menu,
     this.compact = false,
+    this.denseList = false,
+    this.selected = false,
   });
 
   final Food food;
@@ -24,9 +27,14 @@ class FoodListItem extends StatelessWidget {
 
   /// Dialog results use the entire available width and stack energy below name.
   final bool compact;
+  final bool denseList;
+  final bool selected;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      ScrollScaleReveal(child: _buildItem(context));
+
+  Widget _buildItem(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final source = switch (food.source) {
       'off' => 'OFF',
@@ -40,6 +48,67 @@ class FoodListItem extends StatelessWidget {
       if (food.brand != null && food.brand!.trim().isNotEmpty) food.brand!,
     ].join(' · ');
 
+    if (denseList) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: Material(
+          color: selected
+              ? dark
+                    ? Color.alphaBlend(
+                        Theme.of(context).colorScheme.secondaryContainer,
+                        LabelColors.dCard,
+                      )
+                    : Theme.of(context).colorScheme.secondaryContainer
+              : dark
+              ? (Theme.of(context).cardTheme.color ??
+                    Theme.of(context).colorScheme.surface)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          child: ListTile(
+            dense: true,
+            selected: selected,
+            onTap: onTap,
+            title: Tooltip(
+              message: food.name,
+              child: Text(
+                food.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            subtitle: Text(
+              '$detail · ${tr(context, 'per100g')}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${round1(food.kcal100)} kcal',
+                  style: numberStyle(15, LabelColors.energyOf(dark)),
+                ),
+                if (onFavorite != null)
+                  IconButton(
+                    tooltip: tr(
+                      context,
+                      food.favorite ? 'favRemove' : 'favAdd',
+                    ),
+                    onPressed: onFavorite,
+                    icon: Icon(
+                      food.favorite
+                          ? Icons.star_rounded
+                          : Icons.star_outline_rounded,
+                      size: 20,
+                    ),
+                  ),
+                ?menu,
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     return Padding(
       padding: EdgeInsets.fromLTRB(compact ? 0 : 16, 0, compact ? 0 : 16, 8),
       child: Card(
@@ -51,7 +120,8 @@ class FoodListItem extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (compact) ...[
+                if (compact ||
+                    MediaQuery.textScalerOf(context).scale(16) > 24) ...[
                   Text(
                     food.name,
                     style: const TextStyle(

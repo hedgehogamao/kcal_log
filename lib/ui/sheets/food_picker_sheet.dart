@@ -56,6 +56,9 @@ class _FoodPickerSheetState extends ConsumerState<FoodPickerSheet> {
   bool _online = false;
   Future<List<OffFood>>? _onlineFuture;
   List<Food>? _recentFoods;
+  List<Food> _frequentFoods = [];
+  final Map<int, double> _lastGrams = {};
+  bool _frequent = false;
   bool _templateBusy = false;
 
   @override
@@ -80,10 +83,41 @@ class _FoodPickerSheetState extends ConsumerState<FoodPickerSheet> {
       if (id != null && !ids.contains(id)) ids.add(id);
       if (ids.length >= 20) break;
     }
-    final foods = await db.foodsByIds(ids);
+    final day = DateTime.parse(widget.date);
+    final from = dateKey(DateTime(day.year, day.month, day.day - 29));
+    final history =
+        (await db.entriesBetween(
+            from,
+            widget.date,
+          )).where((e) => e.meal == widget.meal && e.foodId != null).toList()
+          ..sort((a, b) {
+            final date = b.date.compareTo(a.date);
+            return date != 0 ? date : b.id.compareTo(a.id);
+          });
+    final frequency = <int, int>{};
+    for (final e in history) {
+      frequency[e.foodId!] = (frequency[e.foodId!] ?? 0) + 1;
+    }
+    final ranked = frequency.keys.toList()
+      ..sort((a, b) => frequency[b]!.compareTo(frequency[a]!));
+    for (final e in [...history, ...rows]) {
+      if (e.foodId != null &&
+          e.grams != null &&
+          e.grams!.isFinite &&
+          e.grams! > 0 &&
+          !_lastGrams.containsKey(e.foodId)) {
+        _lastGrams[e.foodId!] = e.grams!;
+      }
+    }
+    final frequentIds = ranked.take(20).toList();
+    final foods = await db.foodsByIds({...ids, ...frequentIds}.toList());
     final byId = {for (final f in foods) f.id: f};
     if (mounted) {
       setState(() {
+        _frequentFoods = [
+          for (final id in frequentIds)
+            if (byId[id] != null) byId[id]!,
+        ];
         _recentFoods = [
           for (final id in ids)
             if (byId[id] != null) byId[id]!,
@@ -423,7 +457,10 @@ class _FoodPickerSheetState extends ConsumerState<FoodPickerSheet> {
                           ),
                       ],
                       selected: _mode,
-                      onChanged: (m) => setState(() => _mode = m),
+                      onChanged: (m) => setState(() {
+                        _mode = m;
+                        _frequent = false;
+                      }),
                     ),
                   ),
                   if (!compact)
@@ -449,6 +486,13 @@ class _FoodPickerSheetState extends ConsumerState<FoodPickerSheet> {
                       switch (action) {
                         case 'online':
                           _setOnline(!_online);
+                        case 'frequent':
+                          setState(() {
+                            _mode = _Mode.recent;
+                            _frequent = true;
+                            _online = false;
+                          });
+                          break;
                         case 'quick':
                           _quickAdd();
                         case 'barcode':
@@ -465,6 +509,10 @@ class _FoodPickerSheetState extends ConsumerState<FoodPickerSheet> {
                             '${tr(context, 'offOnline')}${_online ? ' ✓' : ''}',
                           ),
                         ),
+                      PopupMenuItem(
+                        value: 'frequent',
+                        child: Text(tr(context, 'mealFrequent')),
+                      ),
                       PopupMenuItem(
                         value: 'quick',
                         child: Text(tr(context, 'quickAdd')),
@@ -617,7 +665,7 @@ class _FoodPickerSheetState extends ConsumerState<FoodPickerSheet> {
   }
 
   Widget _recentList() {
-    final recent = _recentFoods;
+    final recent = _frequent ? _frequentFoods : _recentFoods;
     if (recent == null) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -648,7 +696,9 @@ class _FoodPickerSheetState extends ConsumerState<FoodPickerSheet> {
         Padding(
           padding: const EdgeInsets.fromLTRB(18, 4, 18, 10),
           child: Text(
-            tr(context, 'foodResults', {'n': '${visible.length}'}),
+            _frequent
+                ? '${tr(context, 'mealFrequent')} · ${visible.length}'
+                : tr(context, 'foodResults', {'n': '${visible.length}'}),
             style: captionStyle(context),
           ),
         ),
@@ -660,6 +710,7 @@ class _FoodPickerSheetState extends ConsumerState<FoodPickerSheet> {
               date: widget.date,
               meal: widget.meal,
               food: f,
+              initialGrams: _lastGrams[f.id],
             ),
           ),
       ],

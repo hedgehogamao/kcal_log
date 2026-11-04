@@ -181,7 +181,9 @@ class _MealProgressCardState extends State<MealProgressCard> {
       child: Icon(
         logged ? Icons.check : Icons.circle,
         size: logged ? 16 : 8,
-        color: logged || picked ? Colors.white : LabelColors.inkSoftOf(dark),
+        color: logged || picked
+            ? Theme.of(context).colorScheme.onPrimary
+            : LabelColors.inkSoftOf(dark),
       ),
     );
     final label = Text(

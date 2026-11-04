@@ -1,41 +1,39 @@
 import 'package:flutter/material.dart';
 
-/// Apple / iOS 系统风格设计 token —— 完整定义见项目根 DESIGN.md
-///
-/// 视觉词汇来自 iOS 系统设置与 Apple Health：
-/// 分组背景（systemGroupedBackground）、纯白卡片（无边框、10px 圆角）、
-/// 系统分隔线、系统色（蓝=交互、粉红=能量、绿/橙/青=三大营养素）、
-/// 活动圆环、Cupertino 滑动分段控件与开关。
+/// 暗金配色：暖黑分组背景、哑光金交互、暖白文字。
+/// 保留语义色区分营养数据，不将颜色变化用于修改营养含义。
 abstract final class LabelColors {
-  // 浅色（iOS System Colors · Light）
-  static const paper = Color(0xFFF2F2F7); // systemGroupedBackground
-  static const card = Colors.white; // secondarySystemGroupedBackground
-  static const ink = Color(0xFF000000); // label
-  static const inkSoft = Color(0xFF8E8E93); // secondaryLabel / systemGray
-  static const rule = Color(0xFFC6C6C8); // separator（描边、导航栏发丝线）
-  static const fill = Color(0xFFE9E9EB); // systemFill（输入框/轨道/侧栏指示）
-  // 深色（iOS System Colors · Dark）
-  static const dPaper = Color(0xFF000000);
-  static const dCard = Color(0xFF1C1C1E);
-  static const dInk = Color(0xFFFFFFFF);
-  static const dInkSoft = Color(0xFF8D8D93);
-  static const dRule = Color(0xFF38383A);
-  static const dFill = Color(0xFF2C2C2E);
-  // 语义色（light / dark）
-  static const blue = Color(0xFF007AFF); // 交互、链接、饮水
-  static const blueDark = Color(0xFF0A84FF);
-  static const energy = Color(0xFFFF2D55); // 能量 kcal · Apple Health 粉红
-  static const energyDark = Color(0xFFFF375F);
-  static const protein = Color(0xFF34C759); // 蛋白质 · systemGreen
-  static const proteinDark = Color(0xFF30D158);
-  static const fat = Color(0xFFFF9500); // 脂肪 · systemOrange
-  static const fatDark = Color(0xFFFF9F0A);
-  static const carb = Color(0xFF30B0C7); // 碳水 · systemTeal
-  static const carbDark = Color(0xFF40C8E0);
-  static const weight = Color(0xFFAF52DE); // 体重 · systemPurple
-  static const weightDark = Color(0xFFBF5AF2);
-  static const error = Color(0xFFFF3B30); // 破坏性操作 / 超标
-  static const errorDark = Color(0xFFFF453A);
+  // Light companion for explicitly selected light mode.
+  static const paper = Color(0xFFF4F0E8);
+  static const card = Color(0xFFFFFCF5);
+  static const ink = Color(0xFF29241C);
+  static const inkSoft = Color(0xFF736A59);
+  static const rule = Color(0xFFD5CBB9);
+  static const fill = Color(0xFFEAE2D3);
+  // Dark gold: layered warm charcoal, never pure black or bright yellow.
+  static const dPaper = Color(0xFF12110F);
+  static const dCard = Color(0xFF1E1B16);
+  static const dInk = Color(0xFFF2E9D7);
+  static const dInkSoft = Color(0xFFB9AC94);
+  static const dRule = Color(0xFF4F4535);
+  static const dFill = Color(0xFF2C261C);
+  static const gold = Color(0xFF806128);
+  static const goldDark = Color(0xFFC7A45D);
+  // Existing components retain their token API; interaction color is now gold.
+  static const blue = gold;
+  static const blueDark = goldDark;
+  static const energy = Color(0xFF9F433A);
+  static const energyDark = Color(0xFFE29A75);
+  static const protein = Color(0xFF32754A);
+  static const proteinDark = Color(0xFF88B597);
+  static const fat = Color(0xFF93642A);
+  static const fatDark = Color(0xFFD3AB77);
+  static const carb = Color(0xFF416F72);
+  static const carbDark = Color(0xFF85B8BB);
+  static const weight = Color(0xFF826587);
+  static const weightDark = Color(0xFFB7A2C3);
+  static const error = Color(0xFFB7382B);
+  static const errorDark = Color(0xFFF29487);
 
   static Color blueOf(bool dark) => dark ? blueDark : blue;
   static Color energyOf(bool dark) => dark ? energyDark : energy;
@@ -76,18 +74,24 @@ ThemeData _theme({required bool dark}) {
   final ink = dark ? LabelColors.dInk : LabelColors.ink;
   final soft = dark ? LabelColors.dInkSoft : LabelColors.inkSoft;
   final blue = LabelColors.blueOf(dark);
-  // 卡片内部的 iOS 细分隔线比全局 separator 更浅
-  final cellSep = dark ? LabelColors.dRule : const Color(0xFFE2E2E7);
+  final cellSep = LabelColors.ruleOf(dark);
+  final onGold = dark ? const Color(0xFF21180B) : LabelColors.card;
   final scheme =
       ColorScheme.fromSeed(
         seedColor: blue,
         brightness: dark ? Brightness.dark : Brightness.light,
       ).copyWith(
         primary: blue,
-        onPrimary: Colors.white,
+        onPrimary: onGold,
         secondary: LabelColors.energyOf(dark),
-        onSecondary: Colors.white,
+        onSecondary: dark ? const Color(0xFF21130C) : LabelColors.card,
         tertiary: LabelColors.carbOf(dark),
+        onTertiary: dark ? const Color(0xFF101E20) : LabelColors.card,
+        secondaryContainer: blue.withValues(alpha: dark ? .14 : .10),
+        onSecondaryContainer: ink,
+        onSurfaceVariant: soft,
+        outline: LabelColors.ruleOf(dark),
+        outlineVariant: LabelColors.ruleOf(dark),
         surface: card,
         onSurface: ink,
         surfaceContainerLowest: card,
@@ -96,7 +100,7 @@ ThemeData _theme({required bool dark}) {
         surfaceContainerHigh: card,
         surfaceContainerHighest: fill,
         error: LabelColors.errorOf(dark),
-        onError: Colors.white,
+        onError: dark ? const Color(0xFF310D09) : LabelColors.card,
       );
 
   final baseTextTheme = ThemeData(
@@ -136,7 +140,7 @@ ThemeData _theme({required bool dark}) {
     ),
     floatingActionButtonTheme: FloatingActionButtonThemeData(
       backgroundColor: blue,
-      foregroundColor: Colors.white,
+      foregroundColor: onGold,
       shape: pill,
       elevation: 0,
       focusElevation: 0,
@@ -150,7 +154,7 @@ ThemeData _theme({required bool dark}) {
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         backgroundColor: blue,
-        foregroundColor: Colors.white,
+        foregroundColor: onGold,
         shape: pill,
         textStyle: labelStyle.copyWith(
           fontSize: 15,
@@ -222,10 +226,10 @@ ThemeData _theme({required bool dark}) {
     navigationRailTheme: NavigationRailThemeData(
       backgroundColor: paper,
       indicatorColor: fill,
-      selectedIconTheme: IconThemeData(color: ink),
+      selectedIconTheme: IconThemeData(color: blue),
       unselectedIconTheme: IconThemeData(color: soft),
       selectedLabelTextStyle: labelStyle.copyWith(
-        color: ink,
+        color: blue,
         fontWeight: FontWeight.w600,
         fontSize: 12,
       ),
@@ -267,9 +271,10 @@ ThemeData _theme({required bool dark}) {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
     ),
     snackBarTheme: SnackBarThemeData(
-      backgroundColor: dark ? LabelColors.dFill : LabelColors.dCard,
+      actionTextColor: LabelColors.goldDark,
+      backgroundColor: dark ? LabelColors.dFill : LabelColors.ink,
       contentTextStyle: labelStyle.copyWith(
-        color: dark ? LabelColors.dInk : Colors.white,
+        color: dark ? LabelColors.dInk : LabelColors.card,
         fontSize: 14,
       ),
       behavior: SnackBarBehavior.floating,

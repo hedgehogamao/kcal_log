@@ -101,3 +101,12 @@ const _categorySearchTerms = <String, List<String>>{
   ],
   'other': ['其他', 'other', 'otros'],
 };
+
+/// Search synonyms only: no renaming, nutrient equivalence or cooking inference.
+List<String> foodSearchAliases(String name) => [
+  for (final (variant, canonical) in _synonyms)
+    if (normalizeFoodSearchText(name)
+            .contains(normalizeFoodSearchText(canonical)) &&
+        !name.contains(variant))
+      variant,
+];

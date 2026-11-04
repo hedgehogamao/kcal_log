@@ -21,6 +21,7 @@ dependencies:
   flutter_riverpod: ^2.6.1
   # Open Food Facts 只读查询（可选联网）
   http: ^1.2.2
+  crypto: ^3.0.7
   # 设置项（单位/主题/饮水目标）
   shared_preferences: ^2.3.4
   # 数据导出 / 导入

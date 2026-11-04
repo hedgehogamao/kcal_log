@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/db.dart';
 import '../../logic/calc.dart';
 import '../../logic/food_category.dart';
+import '../../logic/food_discovery.dart';
 import '../../logic/i18n.dart';
 import '../../logic/providers.dart';
 import '../dialogs.dart';
@@ -15,6 +16,7 @@ import '../widgets/filter_pills.dart';
 import '../widgets/food_category_filter.dart';
 import '../widgets/top_tabs.dart';
 import 'food_packs_page.dart';
+import 'recipe_portions_page.dart';
 
 class FoodsPage extends ConsumerStatefulWidget {
   const FoodsPage({super.key});
@@ -32,6 +34,16 @@ class _FoodsPageState extends ConsumerState<FoodsPage> {
       appBar: AppBar(
         title: Text(tr(context, 'tabFoods')),
         actions: [
+          IconButton(
+            key: const ValueKey('recipe-portions-open'),
+            tooltip: tr(context, 'recipeTitle'),
+            icon: const Icon(Icons.restaurant_menu),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const RecipePortionsPage(),
+              ),
+            ),
+          ),
           IconButton(
             key: const ValueKey('food-pack-open'),
             tooltip: tr(context, 'foodPacks'),
@@ -76,7 +88,10 @@ class _FoodsTab extends ConsumerStatefulWidget {
 class _FoodsTabState extends ConsumerState<_FoodsTab> {
   FoodSourceFilter _source = FoodSourceFilter.all;
   FoodCategory? _category;
+  FoodNutritionFilter _nutrition = FoodNutritionFilter.all;
+  FoodDiscoverySort _sort = FoodDiscoverySort.relevance;
   late final TextEditingController _searchCtrl;
+  int? _selectedFoodId;
 
   @override
   void initState() {
@@ -98,6 +113,8 @@ class _FoodsTabState extends ConsumerState<_FoodsTab> {
     setState(() {
       _source = FoodSourceFilter.custom;
       _category = FoodCategory.fromCode(food.category);
+      _nutrition = FoodNutritionFilter.all;
+      _sort = FoodDiscoverySort.relevance;
     });
   }
 
@@ -116,201 +133,385 @@ class _FoodsTabState extends ConsumerState<_FoodsTab> {
   @override
   Widget build(BuildContext context) {
     final db = ref.watch(dbProvider);
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _searchCtrl,
-                  onChanged: (value) {
-                    widget.onQuery(value);
-                    setState(() {});
-                  },
-                  decoration: InputDecoration(
-                    prefixIcon: const Icon(Icons.search),
-                    hintText: tr(context, 'searchName'),
-                    isDense: true,
-                    suffixIcon: _searchCtrl.text.isEmpty
-                        ? null
-                        : IconButton(
-                            tooltip: tr(context, 'clearSearch'),
-                            icon: const Icon(Icons.close, size: 18),
-                            onPressed: () {
-                              _searchCtrl.clear();
-                              widget.onQuery('');
-                              setState(() {});
-                            },
-                          ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton.filledTonal(
-                tooltip: tr(context, 'newCustomFood'),
-                onPressed: _createFood,
-                icon: const Icon(Icons.add),
-              ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: FoodCategoryFilter(
-            selected: _category,
-            onChanged: (value) => setState(() => _category = value),
-          ),
-        ),
-        // 来源筛选胶囊：选中实底，超出横向滚动
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: FilterPills<FoodSourceFilter>(
-            items: [
-              (FoodSourceFilter.all, tr(context, 'all')),
-              (FoodSourceFilter.fav, tr(context, 'fav')),
-              (FoodSourceFilter.builtin, tr(context, 'sourceBuiltin')),
-              (FoodSourceFilter.custom, tr(context, 'sourceCustom')),
-              (FoodSourceFilter.pack, tr(context, 'sourceFoodPack')),
-              (FoodSourceFilter.off, 'OFF'),
-            ],
-            selected: _source,
-            onChanged: (v) => setState(() => _source = v),
-          ),
-        ),
-        Expanded(
-          child: StreamBuilder<List<Food>>(
-            stream: db.watchFoods(widget.query),
-            builder: (context, snap) {
-              if (!snap.hasData) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              final list = snap.data!.where(_match).toList();
-              if (list.isEmpty) {
-                return Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        tr(
-                          context,
-                          widget.query.trim().isEmpty &&
-                                  _source == FoodSourceFilter.all &&
-                                  _category == null
-                              ? 'noFoods'
-                              : 'noMatchShort',
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      if (widget.query.trim().isNotEmpty ||
-                          _source != FoodSourceFilter.all ||
-                          _category != null) ...[
-                        TextButton.icon(
-                          onPressed: () {
-                            _searchCtrl.clear();
-                            widget.onQuery('');
-                            setState(() {
-                              _source = FoodSourceFilter.all;
-                              _category = null;
-                            });
-                          },
-                          icon: const Icon(Icons.filter_alt_off, size: 18),
-                          label: Text(tr(context, 'clearFilters')),
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                      OutlinedButton.icon(
-                        onPressed: _createFood,
-                        icon: const Icon(Icons.add, size: 18),
-                        label: Text(tr(context, 'newCustomFood')),
-                      ),
-                    ],
-                  ),
-                );
-              }
-              final rows = <Object>[];
-              if (widget.query.trim().isEmpty &&
-                  _source == FoodSourceFilter.all &&
-                  _category == null) {
-                void group(String label, bool Function(Food) include) {
-                  final foods = list.where(include).toList();
-                  if (foods.isEmpty) return;
-                  rows.add('$label · ${foods.length}');
-                  rows.addAll(foods);
-                }
-
-                group(tr(context, 'fav'), (food) => food.favorite);
-                group(
-                  tr(context, 'myFoods'),
-                  (food) => !food.favorite && food.source == 'custom',
-                );
-                group(
-                  tr(context, 'sourceBuiltin'),
-                  (food) => !food.favorite && food.source == 'builtin',
-                );
-                group('OFF', (food) => !food.favorite && food.source == 'off');
-                group(
-                  tr(context, 'sourceFoodPack'),
-                  (food) => !food.favorite && food.source == 'pack',
-                );
-              } else {
-                rows.addAll(list);
-              }
-              return Column(
+    final readSurface = Theme.of(context).brightness == Brightness.dark
+        ? (Theme.of(context).cardTheme.color ??
+              Theme.of(context).colorScheme.surface)
+        : Colors.transparent;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide =
+            constraints.maxWidth >= 850 &&
+            constraints.maxHeight >= 480 &&
+            MediaQuery.textScalerOf(context).scale(14) <= 21;
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Row(
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(18, 0, 18, 10),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        tr(context, 'foodResults', {'n': '${list.length}'}),
-                        style: captionStyle(context),
+                  Expanded(
+                    child: TextField(
+                      controller: _searchCtrl,
+                      onChanged: (value) {
+                        widget.onQuery(value);
+                        setState(() {});
+                      },
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.search),
+                        hintText: tr(context, 'searchName'),
+                        isDense: true,
+                        suffixIcon: _searchCtrl.text.isEmpty
+                            ? null
+                            : IconButton(
+                                tooltip: tr(context, 'clearSearch'),
+                                icon: const Icon(Icons.close, size: 18),
+                                onPressed: () {
+                                  _searchCtrl.clear();
+                                  widget.onQuery('');
+                                  setState(() {});
+                                },
+                              ),
                       ),
                     ),
                   ),
+                  const SizedBox(width: 8),
+                  IconButton.filledTonal(
+                    tooltip: tr(context, 'newCustomFood'),
+                    onPressed: _createFood,
+                    icon: const Icon(Icons.add),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: FoodCategoryFilter(
+                selected: _category,
+                onChanged: (value) => setState(() => _category = value),
+              ),
+            ),
+            // 来源筛选胶囊：选中实底，超出横向滚动
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Row(
+                children: [
                   Expanded(
-                    child: ListView.builder(
-                      padding: const EdgeInsets.only(bottom: 24),
-                      itemCount: rows.length,
-                      itemBuilder: (context, i) {
-                        final row = rows[i];
-                        if (row is String) {
-                          return Padding(
-                            padding: const EdgeInsets.fromLTRB(18, 12, 18, 8),
-                            child: Text(row, style: captionStyle(context)),
-                          );
-                        }
-                        return _FoodRow(food: row as Food);
-                      },
+                    child: FilterPills<FoodSourceFilter>(
+                      items: [
+                        (FoodSourceFilter.all, tr(context, 'all')),
+                        (FoodSourceFilter.fav, tr(context, 'fav')),
+                        (
+                          FoodSourceFilter.builtin,
+                          tr(context, 'sourceBuiltin'),
+                        ),
+                        (FoodSourceFilter.custom, tr(context, 'sourceCustom')),
+                        (FoodSourceFilter.pack, tr(context, 'sourceFoodPack')),
+                        (FoodSourceFilter.off, 'OFF'),
+                      ],
+                      selected: _source,
+                      onChanged: (v) => setState(() => _source = v),
                     ),
                   ),
                 ],
-              );
-            },
-          ),
-        ),
-      ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  PopupMenuButton<FoodNutritionFilter>(
+                    key: const ValueKey('food-nutrition-filter'),
+                    tooltip:
+                        '${tr(context, 'nutritionFilter')}: ${tr(context, _nutrition.labelKey)}',
+                    initialValue: _nutrition,
+                    child: _DiscoveryLabel(
+                      icon: Icons.tune,
+                      label: _nutrition == FoodNutritionFilter.all
+                          ? tr(context, 'nutritionFilter')
+                          : tr(context, _nutrition.labelKey),
+                    ),
+                    onSelected: (v) => setState(() => _nutrition = v),
+                    itemBuilder: (_) => [
+                      for (final v in FoodNutritionFilter.values)
+                        CheckedPopupMenuItem(
+                          value: v,
+                          checked: v == _nutrition,
+                          key: ValueKey('nutrition-${v.name}'),
+                          child: Text(tr(context, v.labelKey)),
+                        ),
+                    ],
+                  ),
+                  PopupMenuButton<FoodDiscoverySort>(
+                    key: const ValueKey('food-discovery-sort'),
+                    tooltip:
+                        '${tr(context, 'foodSort')}: ${tr(context, _sort.labelKey)}',
+                    initialValue: _sort,
+                    child: _DiscoveryLabel(
+                      icon: Icons.sort,
+                      label: _sort == FoodDiscoverySort.relevance
+                          ? tr(context, 'foodSort')
+                          : tr(context, _sort.labelKey),
+                    ),
+                    onSelected: (v) => setState(() => _sort = v),
+                    itemBuilder: (_) => [
+                      for (final v in FoodDiscoverySort.values)
+                        CheckedPopupMenuItem(
+                          value: v,
+                          checked: v == _sort,
+                          key: ValueKey('food-sort-${v.name}'),
+                          child: Text(tr(context, v.labelKey)),
+                        ),
+                    ],
+                  ),
+                  if (_nutrition != FoodNutritionFilter.all ||
+                      _sort != FoodDiscoverySort.relevance)
+                    IconButton(
+                      key: const ValueKey('reset-food-discovery'),
+                      tooltip: tr(context, 'resetDiscovery'),
+                      icon: const Icon(Icons.restart_alt),
+                      onPressed: () => setState(() {
+                        _nutrition = FoodNutritionFilter.all;
+                        _sort = FoodDiscoverySort.relevance;
+                      }),
+                    ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: StreamBuilder<List<Food>>(
+                stream: db.watchFoods(widget.query),
+                builder: (context, snap) {
+                  if (!snap.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final list = discoverFoods(
+                    snap.data!.where(_match),
+                    filter: _nutrition,
+                    sort: _sort,
+                  );
+                  if (list.isEmpty) {
+                    return Center(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              tr(
+                                context,
+                                widget.query.trim().isEmpty &&
+                                        _source == FoodSourceFilter.all &&
+                                        _category == null &&
+                                        _nutrition == FoodNutritionFilter.all
+                                    ? 'noFoods'
+                                    : 'noMatchShort',
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            if (widget.query.trim().isNotEmpty ||
+                                _source != FoodSourceFilter.all ||
+                                _category != null ||
+                                _nutrition != FoodNutritionFilter.all ||
+                                _sort != FoodDiscoverySort.relevance) ...[
+                              TextButton.icon(
+                                onPressed: () {
+                                  _searchCtrl.clear();
+                                  widget.onQuery('');
+                                  setState(() {
+                                    _source = FoodSourceFilter.all;
+                                    _category = null;
+                                    _nutrition = FoodNutritionFilter.all;
+                                    _sort = FoodDiscoverySort.relevance;
+                                  });
+                                },
+                                icon: const Icon(
+                                  Icons.filter_alt_off,
+                                  size: 18,
+                                ),
+                                label: Text(tr(context, 'clearFilters')),
+                              ),
+                              const SizedBox(height: 8),
+                            ],
+                            OutlinedButton.icon(
+                              onPressed: _createFood,
+                              icon: const Icon(Icons.add, size: 18),
+                              label: Text(tr(context, 'newCustomFood')),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+                  final rows = <Object>[];
+                  if (widget.query.trim().isEmpty &&
+                      _source == FoodSourceFilter.all &&
+                      _category == null &&
+                      _nutrition == FoodNutritionFilter.all &&
+                      _sort == FoodDiscoverySort.relevance) {
+                    void group(String label, bool Function(Food) include) {
+                      final foods = list.where(include).toList();
+                      if (foods.isEmpty) return;
+                      rows.add('$label · ${foods.length}');
+                      rows.addAll(foods);
+                    }
+
+                    group(tr(context, 'fav'), (food) => food.favorite);
+                    group(
+                      tr(context, 'myFoods'),
+                      (food) => !food.favorite && food.source == 'custom',
+                    );
+                    group(
+                      tr(context, 'sourceBuiltin'),
+                      (food) => !food.favorite && food.source == 'builtin',
+                    );
+                    group(
+                      'OFF',
+                      (food) => !food.favorite && food.source == 'off',
+                    );
+                    group(
+                      tr(context, 'sourceFoodPack'),
+                      (food) => !food.favorite && food.source == 'pack',
+                    );
+                  } else {
+                    rows.addAll(list);
+                  }
+                  final content = ListView.builder(
+                    padding: const EdgeInsets.only(bottom: 24),
+                    itemCount: rows.length + 1,
+                    itemBuilder: (context, i) {
+                      if (i == 0) {
+                        return ColoredBox(
+                          color: readSurface,
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(18, 0, 18, 10),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                [
+                                  tr(context, 'foodResults', {
+                                    'n': '${list.length}',
+                                  }),
+                                  if (_nutrition != FoodNutritionFilter.all)
+                                    tr(context, _nutrition.labelKey),
+                                  if (_sort != FoodDiscoverySort.relevance)
+                                    tr(context, _sort.labelKey),
+                                ].join(' · '),
+                                style: captionStyle(context),
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+                      final row = rows[i - 1];
+                      if (row is String) {
+                        return ColoredBox(
+                          color: readSurface,
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(18, 12, 18, 8),
+                            child: Text(row, style: captionStyle(context)),
+                          ),
+                        );
+                      }
+                      final food = row as Food;
+                      return _FoodRow(
+                        food: food,
+                        denseList: wide,
+                        selected: wide && food.id == _selectedFoodId,
+                        onSelect: wide
+                            ? () => setState(() => _selectedFoodId = food.id)
+                            : null,
+                      );
+                    },
+                  );
+                  if (!wide) return content;
+                  final selected = list
+                      .where((f) => f.id == _selectedFoodId)
+                      .firstOrNull;
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(child: content),
+                      const VerticalDivider(width: 1),
+                      Container(
+                        color: selected == null ? null : readSurface,
+                        key: const ValueKey('desktop-food-preview'),
+                        width: 350,
+                        child: selected == null
+                            ? Center(
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: readSurface,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  padding: const EdgeInsets.all(20),
+                                  child: Text(
+                                    tr(context, 'desktopSelectFood'),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              )
+                            : KeyedSubtree(
+                                key: const ValueKey('desktop-food-portion'),
+                                child: EntrySheet(
+                                  key: ValueKey('desktop-entry-${selected.id}'),
+                                  date: dateKey(DateTime.now()),
+                                  meal: currentMealType(),
+                                  food: selected,
+                                  embedded: true,
+                                  onSaved: () {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          tr(context, 'desktopFoodSaved'),
+                                        ),
+                                      ),
+                                    );
+                                    setState(() => _selectedFoodId = null);
+                                  },
+                                ),
+                              ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
 
 class _FoodRow extends ConsumerWidget {
-  const _FoodRow({required this.food});
+  const _FoodRow({
+    required this.food,
+    this.onSelect,
+    this.denseList = false,
+    this.selected = false,
+  });
 
   final Food food;
+  final VoidCallback? onSelect;
+  final bool denseList;
+  final bool selected;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final db = ref.watch(dbProvider);
     return FoodListItem(
       food: food,
-      onTap: () => showEntrySheet(
-        context,
-        date: dateKey(DateTime.now()),
-        meal: currentMealType(),
-        food: food,
-      ),
+      denseList: denseList,
+      selected: selected,
+      onTap:
+          onSelect ??
+          () => showEntrySheet(
+            context,
+            date: dateKey(DateTime.now()),
+            meal: currentMealType(),
+            food: food,
+          ),
       onFavorite: () => db.toggleFavorite(food),
       menu: PopupMenuButton<String>(
         onSelected: (v) async {
@@ -780,5 +981,31 @@ class _StepButton extends StatelessWidget {
     tooltip: tooltip,
     onPressed: onTap,
     icon: Icon(icon, size: 20),
+  );
+}
+
+/// Always-visible filter values; wraps at narrow widths and large text sizes.
+class _DiscoveryLabel extends StatelessWidget {
+  const _DiscoveryLabel({required this.icon, required this.label});
+  final IconData icon;
+  final String label;
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+    decoration: BoxDecoration(
+      color: Theme.of(context).brightness == Brightness.dark
+          ? Theme.of(context).colorScheme.surfaceContainerHighest
+          : null,
+      border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 18),
+        const SizedBox(width: 6),
+        Flexible(child: Text(label)),
+      ],
+    ),
   );
 }

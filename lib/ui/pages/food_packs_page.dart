@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/db.dart';
 import '../../data/food_pack.dart';
+import '../../data/food_pack_update.dart';
 import '../../logic/i18n.dart';
 import '../../logic/providers.dart';
 
@@ -21,6 +22,7 @@ class _FoodPacksPageState extends ConsumerState<FoodPacksPage> {
   bool _confirming = false;
   String? _result;
   String? _error;
+  FoodPack? _available;
   late final Stream<List<FoodCatalog>> _catalogs = ref
       .read(dbProvider)
       .select(ref.read(dbProvider).foodCatalogs)
@@ -60,32 +62,86 @@ class _FoodPacksPageState extends ConsumerState<FoodPacksPage> {
       );
       if (picked == null || !mounted) return;
       final pack = FoodPack.decode(await _read(picked.files.single));
-      final loader = FoodPackLoader(ref.read(dbProvider));
-      final plan = await loader.preview(pack);
-      if (!mounted) return;
-      if (plan.current) {
-        setState(() => _result = tr(context, 'packCurrent'));
-        return;
-      }
-      setState(() => _confirming = true);
-      final approved = await showDialog<bool>(
-        context: context,
-        builder: (_) => _PackPreview(plan: plan),
-      );
-      if (mounted) setState(() => _confirming = false);
-      if (approved != true || !mounted) return;
-      final actual = await loader.apply(pack);
+      await _review(pack);
+    } on FoodPackException catch (e) {
+      if (mounted) setState(() => _error = tr(context, e.code));
+    } catch (_) {
+      if (mounted) setState(() => _error = tr(context, 'packReadFail'));
+    } finally {
       if (mounted) {
-        setState(
-          () => _result = actual.current
-              ? tr(context, 'packCurrent')
-              : tr(context, 'packResult', {
-                  'a': '${actual.added}',
-                  'u': '${actual.updated}',
-                  'p': '${actual.protected}',
-                }),
-        );
+        setState(() {
+          _busy = false;
+          _confirming = false;
+        });
       }
+    }
+  }
+
+  Future<void> _review(FoodPack pack) async {
+    final loader = FoodPackLoader(ref.read(dbProvider));
+    final plan = await loader.preview(pack);
+    if (!mounted) return;
+    if (plan.current) {
+      setState(() => _result = tr(context, 'packCurrent'));
+      return;
+    }
+    setState(() => _confirming = true);
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (_) => _PackPreview(plan: plan),
+    );
+    if (mounted) setState(() => _confirming = false);
+    if (approved != true || !mounted) return;
+    final actual = await loader.apply(pack);
+    if (mounted) {
+      setState(
+        () => _result = actual.current
+            ? tr(context, 'packCurrent')
+            : tr(context, 'packResult', {
+                'a': '${actual.added}',
+                'u': '${actual.updated}',
+                'p': '${actual.protected}',
+              }),
+      );
+    }
+  }
+
+  Future<void> _checkOnline() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+      _available = null;
+    });
+    try {
+      final pack = await ref.read(foodPackUpdateProvider).check();
+      if (!mounted) return;
+      final preview = await FoodPackLoader(ref.read(dbProvider)).preview(pack);
+      setState(() {
+        if (preview.current) {
+          _result = tr(context, 'packCurrent');
+        } else {
+          _available = pack;
+          _result = null;
+        }
+      });
+    } on FoodPackException catch (e) {
+      if (mounted) setState(() => _error = tr(context, e.code));
+    } catch (_) {
+      if (mounted) setState(() => _error = tr(context, 'packReadFail'));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _applyOnline() async {
+    if (_busy || _available == null) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await _review(_available!);
     } on FoodPackException catch (e) {
       if (mounted) setState(() => _error = tr(context, e.code));
     } catch (_) {
@@ -140,6 +196,23 @@ class _FoodPacksPageState extends ConsumerState<FoodPacksPage> {
                       tr(context, 'packLimit'),
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
+                    Text(tr(context, 'packOnlineHelp')),
+                    OutlinedButton.icon(
+                      key: const ValueKey('food-pack-check-online'),
+                      onPressed: _busy ? null : _checkOnline,
+                      icon: const Icon(Icons.cloud_download_outlined),
+                      label: Text(tr(context, 'packCheckOnline')),
+                    ),
+                    if (_available != null) ...[
+                      Text(
+                        '${_available!.title} · r${_available!.revision} · ${_available!.foods.length}',
+                      ),
+                      TextButton(
+                        key: const ValueKey('food-pack-online-preview'),
+                        onPressed: _busy ? null : _applyOnline,
+                        child: Text(tr(context, 'packOnlinePreview')),
+                      ),
+                    ],
                   ],
                 ),
               ),

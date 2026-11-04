@@ -174,6 +174,44 @@ class AppDatabase extends _$AppDatabase {
 
   Future<void> addEntry(EntriesCompanion c) => into(entries).insert(c);
 
+  /// Copy the reviewed snapshots atomically; no live food values are guessed.
+  Future<List<int>> copyMealSnapshots(
+    List<FoodEntry> reviewed,
+    String destination,
+  ) => transaction(() async {
+    final ids = <int>[];
+    for (final e in reviewed) {
+      final existing = e.foodId == null
+          ? null
+          : await (select(
+              foods,
+            )..where((f) => f.id.equals(e.foodId!))).getSingleOrNull();
+      ids.add(
+        await into(entries).insert(
+          EntriesCompanion.insert(
+            date: destination,
+            meal: e.meal,
+            name: e.name,
+            foodId: Value(existing?.id),
+            grams: Value(e.grams),
+            kcal: e.kcal,
+            protein: Value(e.protein),
+            fat: Value(e.fat),
+            carb: Value(e.carb),
+          ),
+        ),
+      );
+    }
+    return ids;
+  });
+
+  /// Undo only the rows created by the corresponding copy action.
+  Future<void> deleteCopiedEntries(List<int> ids) => transaction(() async {
+    if (ids.isNotEmpty) {
+      await (delete(entries)..where((e) => e.id.isIn(ids))).go();
+    }
+  });
+
   Future<void> updateEntry(FoodEntry row) => update(entries).replace(row);
 
   Future<void> deleteEntry(int id) =>

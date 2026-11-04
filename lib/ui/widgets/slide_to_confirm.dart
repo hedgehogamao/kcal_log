@@ -78,75 +78,77 @@ class _SlideToConfirmState extends State<SlideToConfirm>
     final ok = LabelColors.proteinOf(dark);
     final accent = _done ? ok : LabelColors.blueOf(dark);
 
-    return LayoutBuilder(builder: (context, c) {
-      final maxDx = math.max(0.0, c.maxWidth - _thumb - 4);
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onHorizontalDragStart: _done ? null : (_) => _settle.stop(),
-        onHorizontalDragUpdate: _done
-            ? null
-            : (d) => setState(() {
+    return LayoutBuilder(
+      builder: (context, c) {
+        final maxDx = math.max(0.0, c.maxWidth - _thumb - 4);
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onHorizontalDragStart: _done ? null : (_) => _settle.stop(),
+          onHorizontalDragUpdate: _done
+              ? null
+              : (d) => setState(() {
                   _p = (_p + d.delta.dx / maxDx).clamp(0.0, 1.0);
                 }),
-        onHorizontalDragEnd: _done
-            ? null
-            : (_) {
-                if (_p >= _threshold) {
-                  _finish();
-                } else {
-                  _springBack();
-                }
-              },
-        onHorizontalDragCancel: _done ? null : _springBack,
-        child: Container(
-          height: 48,
-          decoration: BoxDecoration(
-            color: _done
-                ? ok.withValues(alpha: 0.14)
-                : Theme.of(context).colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(24),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(24),
-            child: Stack(
-              children: [
-                Center(
-                  child: Opacity(
-                    opacity: _done
-                        ? 1
-                        : (1 - _p * 1.4).clamp(0.0, 1.0),
-                    child: Text(
-                      _done ? widget.successLabel : widget.label,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: _done ? ok : LabelColors.inkSoftOf(dark),
+          onHorizontalDragEnd: _done
+              ? null
+              : (_) {
+                  if (_p >= _threshold) {
+                    _finish();
+                  } else {
+                    _springBack();
+                  }
+                },
+          onHorizontalDragCancel: _done ? null : _springBack,
+          child: Container(
+            height: 48,
+            decoration: BoxDecoration(
+              color: _done
+                  ? ok.withValues(alpha: 0.14)
+                  : Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: Stack(
+                children: [
+                  Center(
+                    child: Opacity(
+                      opacity: _done ? 1 : (1 - _p * 1.4).clamp(0.0, 1.0),
+                      child: Text(
+                        _done ? widget.successLabel : widget.label,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: _done ? ok : LabelColors.inkSoftOf(dark),
+                        ),
                       ),
                     ),
                   ),
-                ),
-                Positioned(
-                  left: 2 + _p.clamp(0.0, 1.0) * maxDx,
-                  top: 2,
-                  child: Container(
-                    width: _thumb,
-                    height: _thumb,
-                    decoration:
-                        BoxDecoration(color: accent, shape: BoxShape.circle),
-                    child: Icon(
-                      _done
-                          ? CupertinoIcons.check_mark
-                          : CupertinoIcons.chevron_right_2,
-                      color: Colors.white,
-                      size: 18,
+                  Positioned(
+                    left: 2 + _p.clamp(0.0, 1.0) * maxDx,
+                    top: 2,
+                    child: Container(
+                      width: _thumb,
+                      height: _thumb,
+                      decoration: BoxDecoration(
+                        color: accent,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        _done
+                            ? CupertinoIcons.check_mark
+                            : CupertinoIcons.chevron_right_2,
+                        color: Theme.of(context).colorScheme.onPrimary,
+                        size: 18,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   }
 }

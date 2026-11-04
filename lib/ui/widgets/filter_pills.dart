@@ -55,7 +55,7 @@ class FilterPills<T> extends StatelessWidget {
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                         color: items[i].$1 == selected
-                            ? Colors.white
+                            ? Theme.of(context).colorScheme.onPrimary
                             : LabelColors.inkOf(dark),
                       ),
                     ),

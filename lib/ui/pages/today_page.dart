@@ -7,6 +7,7 @@ import '../../logic/calc.dart';
 import '../../logic/i18n.dart';
 import '../../logic/providers.dart';
 import '../sheets/entry_sheet.dart';
+import 'text_meal_page.dart';
 import '../sheets/food_picker_sheet.dart';
 import '../theme.dart';
 import '../widgets/charts.dart';
@@ -27,6 +28,99 @@ class _TodayPageState extends ConsumerState<TodayPage> {
   DateTime _date = DateTime.now();
 
   bool get _isToday => dateKey(_date) == dateKey(DateTime.now());
+  bool _copyBusy = false;
+
+  Future<void> _copyYesterdayMeal(
+    MealType? meal,
+    String destination,
+    bool useKj,
+  ) async {
+    if (_copyBusy) return;
+    setState(() => _copyBusy = true);
+    try {
+      final date = DateTime.parse(destination);
+      final previous = dateKey(DateTime(date.year, date.month, date.day - 1));
+      final db = ref.read(dbProvider);
+      final rows = (await db.entriesBetween(
+        previous,
+        previous,
+      )).where((e) => meal == null || e.meal == meal).toList();
+      if (!mounted) return;
+      if (rows.isEmpty) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(tr(context, 'noYesterdayMeal'))));
+        return;
+      }
+      final approved = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(
+            tr(
+              dialogContext,
+              meal == null ? 'copyDayReview' : 'copyMealReview',
+            ),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$previous → $destination · ${meal == null ? tr(dialogContext, 'copyWholeDay') : mealLabel(dialogContext, meal)}',
+                ),
+                for (final e in rows)
+                  Text(
+                    '${meal == null ? '${mealLabel(dialogContext, e.meal)} · ' : ''}${e.name} · ${e.grams == null ? "—" : "${round1(e.grams!)} g"} · ${fmtEnergy(e.kcal, useKj)} ${energyUnit(useKj)}',
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: Text(tr(dialogContext, 'cancel')),
+            ),
+            FilledButton(
+              key: const ValueKey('copy-meal-confirm'),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: Text(tr(dialogContext, 'copyMealConfirm')),
+            ),
+          ],
+        ),
+      );
+      if (approved != true || !mounted) return;
+      final ids = await db.copyMealSnapshots(rows, destination);
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            children: [
+              Text(tr(context, 'copyMealDone', {'n': '${ids.length}'})),
+              TextButton(
+                onPressed: () {
+                  messenger.hideCurrentSnackBar();
+                  db.deleteCopiedEntries(ids);
+                },
+                child: Text(tr(context, 'undo')),
+              ),
+            ],
+          ),
+        ),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(tr(context, 'copyMealFailed'))));
+      }
+    } finally {
+      if (mounted) setState(() => _copyBusy = false);
+    }
+  }
 
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
@@ -123,6 +217,23 @@ class _TodayPageState extends ConsumerState<TodayPage> {
                         style: Theme.of(context).textTheme.headlineSmall
                             ?.copyWith(fontWeight: FontWeight.w600),
                       ),
+                    ),
+                    IconButton(
+                      key: const ValueKey('text-meal-open'),
+                      tooltip: tr(context, 'textMealTitle'),
+                      icon: const Icon(Icons.text_fields),
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => TextMealPage(date: dateKeyStr),
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      key: const ValueKey('copy-day-open'),
+                      tooltip: tr(context, 'copyWholeDay'),
+                      icon: const Icon(Icons.copy_all_outlined),
+                      onPressed: () =>
+                          _copyYesterdayMeal(null, dateKeyStr, settings.useKj),
                     ),
                     const LangButton(),
                   ],
@@ -222,6 +333,8 @@ class _TodayPageState extends ConsumerState<TodayPage> {
                       entry: e,
                     ),
                     onDelete: _deleteEntry,
+                    onCopy: () =>
+                        _copyYesterdayMeal(meal, dateKeyStr, settings.useKj),
                     onAdd: () =>
                         openAddEntryFlow(context, date: dateKeyStr, meal: meal),
                   ),
@@ -504,6 +617,7 @@ class _MealSection extends StatelessWidget {
     required this.onEdit,
     required this.onDelete,
     required this.onAdd,
+    required this.onCopy,
   });
 
   final String date;
@@ -513,6 +627,7 @@ class _MealSection extends StatelessWidget {
   final void Function(FoodEntry) onEdit;
   final void Function(FoodEntry) onDelete;
   final VoidCallback onAdd;
+  final VoidCallback onCopy;
 
   @override
   Widget build(BuildContext context) {
@@ -532,6 +647,12 @@ class _MealSection extends StatelessWidget {
                   style: Theme.of(context).textTheme.titleSmall
                       ?.copyWith(fontWeight: FontWeight.w600),
                 ),
+              ),
+              IconButton(
+                key: ValueKey('meal-copy-${meal.name}'),
+                tooltip: tr(context, 'copyYesterdayMeal'),
+                onPressed: onCopy,
+                icon: const Icon(Icons.content_copy_outlined, size: 20),
               ),
               IconButton(
                 key: ValueKey('meal-add-${meal.name}'),
@@ -579,7 +700,10 @@ class _MealSection extends StatelessWidget {
                 alignment: Alignment.centerRight,
                 padding: const EdgeInsets.only(right: 20),
                 color: Theme.of(context).colorScheme.error,
-                child: const Icon(Icons.delete_outline, color: Colors.white),
+                child: Icon(
+                  Icons.delete_outline,
+                  color: Theme.of(context).colorScheme.onError,
+                ),
               ),
               child: InkWell(
                 onTap: () => onEdit(e),

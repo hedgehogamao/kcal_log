@@ -7,18 +7,22 @@ import 'logic/i18n.dart';
 import 'logic/providers.dart';
 import 'ui/shell.dart';
 import 'ui/theme.dart';
+import 'ui/widgets/liquid_gold_backdrop.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
-  runApp(ProviderScope(
-    overrides: [prefsProvider.overrideWithValue(prefs)],
-    child: const KcalLogApp(),
-  ));
+  runApp(
+    ProviderScope(
+      overrides: [prefsProvider.overrideWithValue(prefs)],
+      child: const KcalLogApp(),
+    ),
+  );
 }
 
 class KcalLogApp extends ConsumerWidget {
-  const KcalLogApp({super.key});
+  const KcalLogApp({super.key, this.animateGold = true});
+  final bool animateGold;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -30,19 +34,17 @@ class KcalLogApp extends ConsumerWidget {
       darkTheme: buildDarkTheme(),
       themeMode: settings.themeMode,
       locale: Locale(settings.lang.code),
-      supportedLocales: const [
-        Locale('en'),
-        Locale('es'),
-        Locale('zh'),
-      ],
+      supportedLocales: const [Locale('en'), Locale('es'), Locale('zh')],
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
       home: const HomeShell(),
-      builder: (context, child) =>
-          LangScope(lang: settings.lang, child: child!),
+      builder: (context, child) => LangScope(
+        lang: settings.lang,
+        child: LiquidGoldScene(animate: animateGold, child: child!),
+      ),
     );
   }
 }

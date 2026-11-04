@@ -113,7 +113,7 @@ void main() {
             size: Size(width, 1050),
             textScaler: TextScaler.linear(scale),
           ),
-          child: const KcalLogApp(),
+          child: const KcalLogApp(animateGold: false),
         ),
       ),
     );

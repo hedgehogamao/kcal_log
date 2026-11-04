@@ -304,6 +304,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     title: tr(context, 'useKj'),
                     detail: tr(context, 'useKjSub'),
                     trailing: CupertinoSwitch(
+                      activeTrackColor: Theme.of(context).colorScheme.primary,
+                      thumbColor: settings.useKj
+                          ? Theme.of(context).colorScheme.onPrimary
+                          : Theme.of(context).colorScheme.onSurfaceVariant,
                       value: settings.useKj,
                       onChanged: ref.read(settingsProvider.notifier).setUseKj,
                     ),

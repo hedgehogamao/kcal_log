@@ -1,3 +1,5 @@
+import '../widgets/food_provenance.dart';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -17,14 +19,20 @@ Future<void> showEntrySheet(
   MealType? meal,
   Food? food,
   FoodEntry? entry,
+  double? initialGrams,
 }) {
   assert(food != null || entry != null);
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) =>
-        EntrySheet(date: date, meal: meal, food: food, entry: entry),
+    builder: (_) => EntrySheet(
+      date: date,
+      meal: meal,
+      food: food,
+      entry: entry,
+      initialGrams: initialGrams,
+    ),
   );
 }
 
@@ -36,11 +44,17 @@ class EntrySheet extends ConsumerStatefulWidget {
     this.meal,
     this.food,
     this.entry,
+    this.embedded = false,
+    this.onSaved,
+    this.initialGrams,
   });
   final String date;
   final MealType? meal;
   final Food? food;
   final FoodEntry? entry;
+  final double? initialGrams;
+  final bool embedded;
+  final VoidCallback? onSaved;
 
   @override
   ConsumerState<EntrySheet> createState() => _EntrySheetState();
@@ -64,7 +78,12 @@ class _EntrySheetState extends ConsumerState<EntrySheet> {
     _inputUseKj = ref.read(settingsProvider).useKj;
     final food = widget.food;
     final entry = widget.entry;
-    final serving = food?.servingGrams;
+    final serving =
+        widget.initialGrams != null &&
+            widget.initialGrams!.isFinite &&
+            widget.initialGrams! > 0
+        ? widget.initialGrams
+        : food?.servingGrams;
     _gramsCtrl = TextEditingController(
       text: food != null
           ? round1(
@@ -196,7 +215,13 @@ class _EntrySheetState extends ConsumerState<EntrySheet> {
           ),
         );
       }
-      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        if (widget.onSaved != null) {
+          widget.onSaved!();
+        } else {
+          Navigator.pop(context);
+        }
+      }
     } catch (_) {
       if (mounted) setState(() => _error = tr(context, 'saveFail'));
     } finally {
@@ -250,29 +275,42 @@ class _EntrySheetState extends ConsumerState<EntrySheet> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Center(
-                    child: Container(
-                      width: 36,
-                      height: 4,
-                      margin: const EdgeInsets.only(bottom: 16),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(2),
+                  if (!widget.embedded)
+                    Center(
+                      child: Container(
+                        width: 36,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
                       ),
                     ),
-                  ),
                   Text(
                     title,
                     style: Theme.of(context).textTheme.titleLarge
                         ?.copyWith(fontWeight: FontWeight.w600),
                   ),
+                  if (widget.embedded && food != null)
+                    Text(
+                      '${tr(context, food.source == 'builtin'
+                          ? 'sourceBuiltin'
+                          : food.source == 'pack'
+                          ? 'sourceFoodPack'
+                          : food.source == 'off'
+                          ? 'offSourceLabel'
+                          : 'sourceCustom')} · ${tr(context, 'per100g')} · ${fmtEnergy(food.kcal100, useKj)} ${energyUnit(useKj)}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   if (food?.brand?.trim().isNotEmpty == true)
                     Text(
                       food!.brand!,
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
+                  if (food != null) FoodProvenance(food: food),
                   const SizedBox(height: 4),
                   Text(
                     tr(context, 'entryDate', {'date': widget.date}),
@@ -305,7 +343,7 @@ class _EntrySheetState extends ConsumerState<EntrySheet> {
                       _kcalMode ? 'kcalField' : 'servingField',
                     ),
                     controller: _kcalMode ? _kcalCtrl : _gramsCtrl,
-                    autofocus: entry == null,
+                    autofocus: entry == null && !widget.embedded,
                     maxLength: 9,
                     showCounter: false,
                     unit: _kcalMode

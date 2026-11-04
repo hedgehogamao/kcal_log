@@ -8,6 +8,7 @@ import 'pages/settings_page.dart';
 import 'pages/stats_page.dart';
 import 'pages/today_page.dart';
 import 'sheets/food_picker_sheet.dart';
+import 'widgets/motion_page_stack.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -18,6 +19,8 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
+  bool _animateNavigation = false;
+  final _pageStackKey = GlobalKey();
 
   static const _destinations = [
     (CupertinoIcons.today, CupertinoIcons.today_fill, 'tabToday'),
@@ -35,6 +38,12 @@ class _HomeShellState extends State<HomeShell> {
       const SettingsPage(),
     ];
 
+    final content = MotionPageStack(
+      key: _pageStackKey,
+      index: _index,
+      pages: pages,
+      animate: _animateNavigation,
+    );
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 880;
@@ -52,8 +61,7 @@ class _HomeShellState extends State<HomeShell> {
                     child: IntrinsicHeight(
                       child: NavigationRail(
                         selectedIndex: _index,
-                        onDestinationSelected: (i) =>
-                            setState(() => _index = i),
+                        onDestinationSelected: (i) => _go(i, animate: true),
                         labelType: constraints.maxWidth >= 1200
                             ? NavigationRailLabelType.all
                             : NavigationRailLabelType.selected,
@@ -71,14 +79,14 @@ class _HomeShellState extends State<HomeShell> {
                   ),
                 ),
                 const VerticalDivider(width: 1),
-                Expanded(child: pages[_index]),
+                Expanded(child: content),
               ],
             ),
           );
         } else {
           final separator = Divider.createBorderSide(context, width: 0.5);
           page = Scaffold(
-            body: pages[_index],
+            body: content,
             bottomNavigationBar: Container(
               decoration: BoxDecoration(
                 border: Border(
@@ -90,7 +98,7 @@ class _HomeShellState extends State<HomeShell> {
               ),
               child: NavigationBar(
                 selectedIndex: _index,
-                onDestinationSelected: (i) => setState(() => _index = i),
+                onDestinationSelected: (i) => _go(i, animate: true),
                 destinations: [
                   for (final (base, selected, label) in _destinations)
                     NavigationDestination(
@@ -119,9 +127,15 @@ class _HomeShellState extends State<HomeShell> {
     );
   }
 
-  void _go(int i) => setState(() => _index = i);
+  void _go(int i, {bool animate = false}) {
+    if (i == _index) return;
+    setState(() {
+      _animateNavigation = animate;
+      _index = i;
+    });
+  }
 
-  void _goSettings() => _go(3);
+  void _goSettings() => _go(3, animate: true);
 
   void _quickAdd() {
     if (_index != 0) _go(0);

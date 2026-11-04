@@ -151,7 +151,7 @@ void main() {
           dbProvider.overrideWithValue(db),
           prefsProvider.overrideWithValue(prefs),
         ],
-        child: const KcalLogApp(),
+        child: const KcalLogApp(animateGold: false),
       ),
     );
     await tester.pumpAndSettle();
