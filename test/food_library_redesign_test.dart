@@ -1,3 +1,5 @@
+import 'support/settle_app.dart';
+
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -102,7 +104,7 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(tester.takeException(), isNull);
     expect(find.text('4 种食物'), findsOneWidget);
     expect(find.text('我的食物 · 2'), findsOneWidget);
@@ -118,20 +120,20 @@ void main() {
         .writeAsBytesSync(bytes!.buffer.asUint8List());
 
     await tester.enterText(find.byType(TextField).first, '西红柿');
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(tester.takeException(), isNull);
     expect(find.text('番茄炒蛋'), findsOneWidget);
     expect(find.text('1 种食物'), findsOneWidget);
 
     await tester.tap(find.byTooltip('清除搜索'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.text('4 种食物'), findsOneWidget);
     await tester.enterText(find.byType(TextField).first, '饮品');
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.text('1 种食物'), findsOneWidget);
     expect(find.text('燕麦饮'), findsOneWidget);
     await tester.tap(find.byTooltip('清除搜索'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.text('4 种食物'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 100));
@@ -172,17 +174,17 @@ void main() {
             ),
           ),
         );
-        await tester.pumpAndSettle();
+        await tester.settleApp();
         if (!picker) {
           await tester.ensureVisible(find.text(label('sourceCustom')));
-          await tester.pumpAndSettle();
+          await tester.settleApp();
           await tester.tap(find.text(label('sourceCustom')));
-          await tester.pumpAndSettle();
+          await tester.settleApp();
         }
         await tester.enterText(find.byType(TextField).first, '燕麦');
-        await tester.pumpAndSettle();
+        await tester.settleApp();
         await tester.tap(find.byTooltip(label('foodCategory')));
-        await tester.pumpAndSettle();
+        await tester.settleApp();
         expect(find.byType(CheckedPopupMenuItem<String>), findsNWidgets(10));
         if (lang == AppLang.zh && !picker) {
           final bytes = await tester.runAsync(() async {
@@ -200,7 +202,7 @@ void main() {
         );
         await tester.ensureVisible(drinkItem);
         await tester.tap(drinkItem);
-        await tester.pumpAndSettle();
+        await tester.settleApp();
         expect(find.text(label('categoryDrink')), findsOneWidget);
         expect(
           find.text(label('foodResults').replaceAll('{n}', '1')),
@@ -208,7 +210,7 @@ void main() {
         );
         expect(find.text('燕麦饮'), findsOneWidget);
         await tester.tap(find.byTooltip(label('clearCategory')));
-        await tester.pumpAndSettle();
+        await tester.settleApp();
         expect(find.text(label('allCategories')), findsOneWidget);
         expect(
           find.text(label('foodResults').replaceAll('{n}', '1')),
@@ -222,7 +224,7 @@ void main() {
           '燕麦',
         );
         await tester.tap(find.byTooltip(label('clearSearch')));
-        await tester.pumpAndSettle();
+        await tester.settleApp();
         expect(
           find.text(label('foodResults').replaceAll('{n}', picker ? '4' : '2')),
           findsOneWidget,
@@ -264,10 +266,10 @@ void main() {
             ),
           ),
         );
-        await tester.pumpAndSettle();
+        await tester.settleApp();
         expect(tester.takeException(), isNull);
         await tester.enterText(find.byType(TextField).first, '燕麦');
-        await tester.pumpAndSettle();
+        await tester.settleApp();
         expect(find.text('燕麦饮'), findsOneWidget);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
@@ -281,7 +283,9 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
     // Reuse this test's isolated executor instead of opening a second database.
-    for (final food in await db.searchFoods('', limit: 1000)) {
+    for (final food in (await tester.runAsync(
+      () => db.searchFoods('', limit: 1000),
+    ))!) {
       await db.deleteFood(food.id);
     }
     final previewDb = db;
@@ -298,9 +302,9 @@ void main() {
         child: const KcalLogApp(animateGold: false),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     await tester.tap(find.text('食物库'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.text('1000 种食物'), findsOneWidget);
     expect(tester.takeException(), isNull);
     Future<void> capture(String name) async {
@@ -316,22 +320,24 @@ void main() {
 
     await capture('food_library_latest');
     await tester.enterText(find.byType(TextField).first, '水果 苹果');
-    await tester.pumpAndSettle();
-    final appleResults = await previewDb.searchFoods('水果 苹果');
+    await tester.settleApp();
+    final appleResults = (await tester.runAsync(
+      () => previewDb.searchFoods('水果 苹果'),
+    ))!;
     expect(appleResults.length, greaterThan(1));
     expect(find.text('${appleResults.length} 种食物'), findsOneWidget);
     expect(find.text('苹果'), findsOneWidget);
     await capture('food_search_latest');
     await tester.tap(find.byTooltip('清除搜索'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.text('1000 种食物'), findsOneWidget);
     tester.view.physicalSize = const Size(1280, 900);
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.byType(NavigationRail), findsOneWidget);
     expect(find.text('1000 种食物'), findsOneWidget);
     await capture('food_library_desktop_latest');
     await tester.tap(find.byType(TextField).first);
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     for (final key in [
       LogicalKeyboardKey.keyN,
       LogicalKeyboardKey.digit1,
@@ -340,7 +346,7 @@ void main() {
       LogicalKeyboardKey.digit4,
     ]) {
       await tester.sendKeyEvent(key);
-      await tester.pumpAndSettle();
+      await tester.settleApp();
       expect(find.byType(FoodsPage), findsOneWidget);
       expect(find.byType(FoodPickerSheet), findsNothing);
       expect(
@@ -351,9 +357,9 @@ void main() {
       );
     }
     Focus.of(tester.element(find.byType(FoodsPage))).requestFocus();
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     await tester.sendKeyEvent(LogicalKeyboardKey.digit1);
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(
       tester.widget<NavigationRail>(find.byType(NavigationRail)).selectedIndex,
       0,
@@ -375,26 +381,26 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     await tester.tap(find.byTooltip('食物分类'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     await tester.tap(
       find.byWidgetPredicate(
         (widget) =>
             widget is CheckedPopupMenuItem<String> && widget.value == 'staple',
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.text('1 种食物'), findsOneWidget);
     expect(find.text('米饭'), findsOneWidget);
     await tester.enterText(find.byType(TextField).first, '西红柿');
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.text('没有匹配的食物'), findsOneWidget);
     await tester.tap(find.text('清除搜索与筛选'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.text('4 种食物'), findsOneWidget);
     await tester.enterText(find.byType(TextField).first, '西红柿');
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.text('番茄炒蛋'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 100));
@@ -419,7 +425,7 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(tester.takeException(), isNull);
     expect(find.text('4 种食物'), findsOneWidget);
     final favorite = find.text('收藏').first;
@@ -438,20 +444,20 @@ void main() {
         .writeAsBytesSync(bytes!.buffer.asUint8List());
 
     await tester.tap(find.byTooltip('食物分类'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     await tester.tap(
       find.byWidgetPredicate(
         (widget) =>
             widget is CheckedPopupMenuItem<String> && widget.value == 'staple',
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.text('1 种食物'), findsOneWidget);
     await tester.tap(find.byTooltip('更多操作'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.text('OFF 在线'), findsOneWidget);
     await tester.tap(find.text('OFF 在线'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.byIcon(Icons.public), findsOneWidget);
     expect(find.text('全部分类'), findsNothing);
     expect(find.text('在线结果未分类'), findsOneWidget);
@@ -463,35 +469,36 @@ void main() {
     File('verification/redesign_20260929/food_picker_online.png')
         .writeAsBytesSync(onlineBytes!.buffer.asUint8List());
     await tester.tap(find.byTooltip('更多操作'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     await tester.tap(find.text('OFF 在线 ✓'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.text('全部分类'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField).first, '西红柿');
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(tester.takeException(), isNull);
     expect(find.text('番茄炒蛋'), findsOneWidget);
     expect(find.text('1 种食物'), findsOneWidget);
     await tester.tap(find.byTooltip('食物分类'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     await tester.tap(
       find.byWidgetPredicate(
         (widget) =>
             widget is CheckedPopupMenuItem<String> && widget.value == 'staple',
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.text('没有匹配的食物'), findsOneWidget);
     await tester.tap(find.text('清除搜索与筛选'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.text('4 种食物'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 100));
   });
 
   testWidgets('最近列表开启 OFF 时切回全部并展示在线区', (tester) async {
-    final rice = (await db.searchFoods('米饭')).firstWhere((f) => f.name == '米饭');
+    final rice = ((await tester.runAsync(() => db.searchFoods('米饭')))!)
+        .firstWhere((f) => f.name == '米饭');
     await db.addEntry(
       EntriesCompanion.insert(
         date: '2026-09-29',
@@ -515,15 +522,15 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.text('1 种食物'), findsOneWidget);
 
     await tester.tap(find.byTooltip('OFF 在线'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(tester.takeException(), isNull);
     expect(find.text('4 种食物'), findsOneWidget);
     await tester.drag(find.byType(ListView).last, const Offset(0, -500));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.text('Open Food Facts（在线结果）'), findsOneWidget);
     expect(find.text('输入至少 2 个字符后搜索在线食物'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
@@ -547,7 +554,7 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(tester.takeException(), isNull);
     final item = find.byType(FoodListItem).first;
     final width = tester.getSize(item).width;
@@ -583,12 +590,12 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     await tester.enterText(find.byType(TextField).first, '香蕉燕麦杯');
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.text('没有匹配的食物'), findsOneWidget);
     await tester.tap(find.text('新建自定义食物'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
 
     Finder field(String label) => find.byWidgetPredicate(
       (widget) => widget is TextField && widget.decoration?.labelText == label,
@@ -597,17 +604,18 @@ void main() {
     await tester.enterText(field('热量 (每100g) *'), '115');
     await tester.enterText(field('条码'), '123456789');
     await tester.tap(find.text('保存'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.text('这个条码已被其他食物使用'), findsOneWidget);
     expect((await db.foodByBarcode('123456789'))!.name, '已有条码食物');
 
     await tester.enterText(field('条码'), '987654321');
     await tester.tap(find.text('保存'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(tester.takeException(), isNull);
     expect(find.text('1 种食物'), findsOneWidget);
     expect(find.text('香蕉燕麦杯'), findsWidgets);
-    final saved = (await db.searchFoods('香蕉燕麦杯')).single;
+    final saved = ((await tester.runAsync(() => db.searchFoods('香蕉燕麦杯')))!)
+        .single;
     expect(saved.kcal100, 115);
     expect(saved.source, 'custom');
     expect(saved.barcode, '987654321');
@@ -625,20 +633,20 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     await tester.tap(find.byTooltip('食物分类'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     await tester.tap(
       find.byWidgetPredicate(
         (w) => w is CheckedPopupMenuItem<String> && w.value == 'drink',
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     await tester.tap(find.text('内置'));
     await tester.enterText(find.byType(TextField).first, '原搜索词');
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     await tester.tap(find.text('新建自定义食物'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(
       tester
           .widget<DropdownButtonFormField<FoodCategory>>(
@@ -648,7 +656,7 @@ void main() {
       FoodCategory.drink,
     );
     await tester.tap(find.text('取消'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(
       tester.widget<TextField>(find.byType(TextField).first).controller!.text,
       '原搜索词',
@@ -663,23 +671,23 @@ void main() {
     expect(await db.foodCount(), 4);
 
     await tester.tap(find.text('新建自定义食物'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     Finder field(String label) => find.byWidgetPredicate(
       (w) => w is TextField && w.decoration?.labelText == label,
     );
     await tester.enterText(field('名称 *'), '我的果汁');
     await tester.enterText(field('热量 (每100g) *'), '50');
     await tester.tap(find.byType(DropdownButtonFormField<FoodCategory>));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     final fruitItem = find
         .widgetWithText(DropdownMenuItem<FoodCategory>, '水果')
         .last;
     await tester.tap(
       find.ancestor(of: fruitItem, matching: find.byType(InkWell)).first,
     );
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     await tester.tap(find.text('保存'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(
       tester.widget<TextField>(find.byType(TextField).first).controller!.text,
       '我的果汁',
@@ -687,7 +695,8 @@ void main() {
     expect(find.text('水果'), findsOneWidget);
     expect(find.text('1 种食物'), findsOneWidget);
     expect(find.text('我的果汁'), findsWidgets);
-    final food = (await db.searchFoods('我的果汁')).single;
+    final food = ((await tester.runAsync(() => db.searchFoods('我的果汁')))!)
+        .single;
     expect(food.category, 'fruit');
     expect(food.source, 'custom');
     expect(await db.recentEntries(), isEmpty);
@@ -711,21 +720,21 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     await tester.tap(find.text('收藏'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     await tester.tap(find.byTooltip('食物分类'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     await tester.tap(
       find.byWidgetPredicate(
         (w) => w is CheckedPopupMenuItem<String> && w.value == 'drink',
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     await tester.enterText(find.byType(TextField).first, '原搜索词');
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     await tester.tap(find.text('新建自定义食物'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(
       tester
           .widget<DropdownButtonFormField<FoodCategory>>(
@@ -740,11 +749,16 @@ void main() {
     await tester.enterText(field('名称 *'), '新建测试饮品');
     await tester.enterText(field('热量 (每100g) *'), '50');
     await tester.tap(find.text('保存'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.text('1 种食物'), findsOneWidget);
     expect(find.text('新建测试饮品'), findsWidgets);
     expect(find.byType(EntrySheet), findsNothing);
-    expect((await db.searchFoods('新建测试饮品')).single.category, 'drink');
+    expect(
+      ((await tester.runAsync(() => db.searchFoods('新建测试饮品')))!)
+          .single
+          .category,
+      'drink',
+    );
     expect(await db.recentEntries(), isEmpty);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
@@ -766,21 +780,21 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     await tester.tap(find.byTooltip('OFF 在线'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.text('在线结果未分类'), findsOneWidget);
     await tester.tap(find.byTooltip('更多操作'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     await tester.tap(find.text('自定义食物'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     Finder field(String label) => find.byWidgetPredicate(
       (w) => w is TextField && w.decoration?.labelText == label,
     );
     await tester.enterText(field('名称 *'), '在线后手动新建');
     await tester.enterText(field('热量 (每100g) *'), '75');
     await tester.tap(find.text('保存'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.text('在线结果未分类'), findsNothing);
     expect(find.text('在线后手动新建'), findsWidgets);
     expect(find.text('1 种食物'), findsOneWidget);
@@ -798,10 +812,11 @@ void main() {
   });
 
   testWidgets('编辑已有食物忽略新建默认分类，并返回正确的保存对象', (tester) async {
-    var existing = (await db.searchFoods('米饭'))
+    var existing = ((await tester.runAsync(() => db.searchFoods('米饭')))!)
         .firstWhere((f) => f.name == '米饭');
     await db.toggleFavorite(existing);
-    existing = (await db.searchFoods('米饭')).firstWhere((f) => f.name == '米饭');
+    existing = ((await tester.runAsync(() => db.searchFoods('米饭')))!)
+        .firstWhere((f) => f.name == '米饭');
     Food? returned;
     await tester.pumpWidget(
       ProviderScope(
@@ -827,7 +842,7 @@ void main() {
       ),
     );
     await tester.tap(find.text('打开编辑'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(
       tester
           .widget<DropdownButtonFormField<FoodCategory>>(
@@ -841,7 +856,7 @@ void main() {
     );
     await tester.enterText(kcal, '120');
     await tester.tap(find.text('保存'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(returned!.id, existing.id);
     expect(returned!.name, '米饭');
     expect(returned!.kcal100, 120);
@@ -863,16 +878,16 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     await tester.tap(find.byTooltip('新建自定义食物'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     Finder field(String label) => find.byWidgetPredicate(
       (widget) => widget is TextField && widget.decoration?.labelText == label,
     );
     await tester.enterText(field('名称 *'), '校验食品');
     await tester.enterText(field('热量 (每100g) *'), 'NaN');
     await tester.tap(find.text('保存'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.text('请填写食物名称和每100g热量'), findsOneWidget);
 
     await tester.enterText(field('热量 (每100g) *'), '100');
@@ -880,7 +895,7 @@ void main() {
     expect(find.text('请填写食物名称和每100g热量'), findsNothing);
     await tester.enterText(field('蛋白质 g'), '-2');
     await tester.tap(find.text('保存'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.text('营养值必须是非负数字'), findsOneWidget);
 
     await tester.enterText(field('蛋白质 g'), '2');
@@ -888,14 +903,15 @@ void main() {
     expect(find.text('营养值必须是非负数字'), findsNothing);
     await tester.enterText(field('份量克数'), 'abc');
     await tester.tap(find.text('保存'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.text('每份克数必须是正数'), findsOneWidget);
 
     await tester.enterText(field('份量克数'), '50');
     await tester.tap(find.text('保存'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(tester.takeException(), isNull);
-    final saved = (await db.searchFoods('校验食品')).single;
+    final saved = ((await tester.runAsync(() => db.searchFoods('校验食品')))!)
+        .single;
     expect(saved.kcal100, 100);
     expect(saved.protein100, 2);
     expect(saved.servingGrams, 50);
@@ -921,24 +937,24 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     final rice = find.byWidgetPredicate(
       (widget) => widget is FoodListItem && widget.food.name == '米饭',
     );
     await tester.ensureVisible(rice);
     await tester.tap(rice);
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(tester.takeException(), isNull);
     expect(find.byType(EntrySheet), findsOneWidget);
     expect(await db.recentEntries(), isEmpty);
     tester.state<NavigatorState>(find.byType(Navigator)).pop();
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     await tester.tap(
       find.descendant(of: rice, matching: find.byType(PopupMenuButton<String>)),
     );
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     await tester.tap(find.text('编辑'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.text('编辑食物'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 100));

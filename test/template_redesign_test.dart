@@ -1,3 +1,5 @@
+import 'support/settle_app.dart';
+
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -98,7 +100,7 @@ void main() {
         ),
       ),
     );
-    await t.pumpAndSettle();
+    await t.settleApp();
   }
 
   Future<void> drain(WidgetTester t) async {
@@ -108,9 +110,9 @@ void main() {
 
   Future<void> tap(WidgetTester t, Finder finder) async {
     await t.ensureVisible(finder);
-    await t.pumpAndSettle();
+    await t.settleApp();
     await t.tap(finder);
-    await t.pumpAndSettle();
+    await t.settleApp();
     expect(t.takeException(), isNull);
   }
 
@@ -130,7 +132,7 @@ void main() {
           .first,
       '水果 苹果',
     );
-    await t.pumpAndSettle();
+    await t.settleApp();
     await tap(
       t,
       find.descendant(
@@ -167,7 +169,7 @@ void main() {
     await tap(t, find.text('open'));
     final field = find.byType(TextField);
     await t.enterText(field, '水果 苹果');
-    await t.pumpAndSettle();
+    await t.settleApp();
     await tap(t, find.byTooltip('食物分类'));
     await tap(
       t,
@@ -181,7 +183,9 @@ void main() {
       FoodCategory.fruit,
     );
     expect(
-      find.text('${(await db.searchFoods('水果 苹果')).length} 项食物'),
+      find.text(
+        '${((await t.runAsync(() => db.searchFoods('水果 苹果')))!).length} 项食物',
+      ),
       findsOneWidget,
     );
     await tap(t, find.byTooltip('清除分类'));
@@ -192,12 +196,12 @@ void main() {
     await tap(t, find.byTooltip('清除搜索'));
     expect(find.text('1000 项食物'), findsOneWidget);
     await t.enterText(field, '不存在xyz');
-    await t.pumpAndSettle();
+    await t.settleApp();
     await tap(t, find.text('清除搜索与筛选'));
     await t.enterText(field, 'fruit 苹果');
-    await t.pumpAndSettle();
+    await t.settleApp();
     await tap(t, find.text('苹果'));
-    expect(chosen!.id, (await apple()).id);
+    expect(chosen!.id, ((await t.runAsync(apple))!).id);
     await drain(t);
   });
 
@@ -207,21 +211,21 @@ void main() {
     await t.enterText(find.byKey(const ValueKey('template_name')), '水果餐');
     await selectApple(t, AppLang.zh);
     final grams = find.byKey(
-      ValueKey('template_grams_${(await apple()).id}_0'),
+      ValueKey('template_grams_${((await t.runAsync(apple))!).id}_0'),
     );
     await t.enterText(grams, '2.5');
-    await t.pumpAndSettle();
+    await t.settleApp();
     await tap(t, find.byTooltip('增加 50 克'));
     expect(t.widget<TextField>(grams).controller!.text, '52.5');
     for (final bad in ['NaN', 'Infinity', '-2', '0', '100001', 'abc']) {
       await t.enterText(grams, bad);
-      await t.pumpAndSettle();
+      await t.settleApp();
       await tap(t, find.text('保存'));
       expect(await db.allTemplates(), isEmpty);
       expect(find.text('请输入大于 0、至多 100000 克'), findsOneWidget);
     }
     await t.enterText(grams, '125.25');
-    await t.pumpAndSettle();
+    await t.settleApp();
     await tap(t, find.text('保存'));
     final meals = await db.allTemplates();
     expect(meals.single.name, '水果餐');
@@ -231,7 +235,7 @@ void main() {
   });
 
   testWidgets('编辑取消保持原数据，原始精度不变，移除食物后可保存', (t) async {
-    final a = await apple(), b = await banana();
+    final a = (await t.runAsync(apple))!, b = (await t.runAsync(banana))!;
     final id = await db.saveTemplate('组合', [(a.id, 125.123456), (b.id, 50)]);
     await mount(t);
     await tap(t, find.text('组合餐'));
@@ -322,7 +326,7 @@ void main() {
 
   testWidgets('记录组合先显示日期餐次和kJ预览，取消不写入，双击确认只写一次', (t) async {
     await prefs.setBool('useKj', true);
-    final a = await apple(), b = await banana();
+    final a = (await t.runAsync(apple))!, b = (await t.runAsync(banana))!;
     await db.saveTemplate('水果套餐', [(a.id, 200), (b.id, 100)]);
     await mount(
       t,
@@ -352,7 +356,7 @@ void main() {
     final confirmPoint = t.getCenter(find.text('记录组合餐'));
     await t.tapAt(confirmPoint);
     await t.tapAt(confirmPoint);
-    await t.pumpAndSettle();
+    await t.settleApp();
     final entries = await db.recentEntries();
     expect(entries.length, 2);
     expect(
@@ -369,7 +373,7 @@ void main() {
   });
 
   testWidgets('整餐写入失败不留部分记录，保持入口可重试', (t) async {
-    final a = await apple(), b = await banana();
+    final a = (await t.runAsync(apple))!, b = (await t.runAsync(banana))!;
     await db.saveTemplate('事务餐', [(a.id, 200), (b.id, 100)]);
     await db.customStatement(
       "CREATE TRIGGER fail_entry BEFORE INSERT ON entries WHEN NEW.name = '香蕉' BEGIN SELECT RAISE(ABORT, 'fixture'); END",
@@ -414,7 +418,7 @@ void main() {
     await newMeal(t, AppLang.es);
     await tap(t, find.text(tText(AppLang.es, 'addFood')));
     t.view.viewInsets = const FakeViewPadding(bottom: 250);
-    await t.pumpAndSettle();
+    await t.settleApp();
     await t.enterText(
       find.descendant(
         of: find.byType(AlertDialog).last,
@@ -422,11 +426,11 @@ void main() {
       ),
       '水果 苹果',
     );
-    await t.pumpAndSettle();
+    await t.settleApp();
     await tap(t, find.text('苹果'));
     expect(t.takeException(), isNull);
     t.view.resetViewInsets();
-    await t.pumpAndSettle();
+    await t.settleApp();
     await drain(t);
   });
 
@@ -441,16 +445,18 @@ void main() {
         child: const KcalLogApp(animateGold: false),
       ),
     );
-    await t.pumpAndSettle();
+    await t.settleApp();
     await tap(t, find.text('食物库'));
     await newMeal(t, AppLang.zh);
     await t.enterText(find.byKey(const ValueKey('template_name')), '完整流程餐');
     await selectApple(t, AppLang.zh);
     await t.enterText(
-      find.byKey(ValueKey('template_grams_${(await apple()).id}_0')),
+      find.byKey(
+        ValueKey('template_grams_${((await t.runAsync(apple))!).id}_0'),
+      ),
       '100',
     );
-    await t.pumpAndSettle();
+    await t.settleApp();
     await tap(t, find.text('保存'));
     expect(await db.recentEntries(), isEmpty);
     await tap(t, find.text('今日'));
@@ -471,7 +477,7 @@ void main() {
       } else {
         await t.ensureVisible(finder);
       }
-      await t.pumpAndSettle();
+      await t.settleApp();
     }
 
     await reveal(find.byKey(const ValueKey('meal-node-dinner')));
@@ -512,7 +518,7 @@ void main() {
             )
             .first,
       );
-      await t.pumpAndSettle();
+      await t.settleApp();
     }
     await tap(t, unitSwitch);
     expect(prefs.getBool('useKj'), isTrue);
@@ -521,15 +527,15 @@ void main() {
     await tap(t, find.text('食物库'));
     await tap(t, find.text('食物'));
     await t.enterText(find.byType(TextField).first, '水果 苹果');
-    await t.pumpAndSettle();
+    await t.settleApp();
     expect(find.byType(FoodListItem), findsWidgets);
     expect(
       find.descendant(of: find.byType(FoodListItem), matching: find.text('苹果')),
       findsOneWidget,
     );
-    final expectedAppleIds = (await db.searchFoods('水果 苹果'))
-        .map((f) => f.id)
-        .toSet();
+    final expectedAppleIds = ((await t.runAsync(
+      () => db.searchFoods('水果 苹果'),
+    ))!).map((f) => f.id).toSet();
     expect(expectedAppleIds.length, greaterThan(1));
     for (final widget in t.widgetList<FoodListItem>(
       find.byType(FoodListItem),
@@ -555,7 +561,7 @@ void main() {
       await t.enterText(find.byKey(const ValueKey('template_name')), '水果早餐');
       await selectApple(t, lang);
       await t.ensureVisible(find.byTooltip(tText(lang, 'templateLess')));
-      await t.pumpAndSettle();
+      await t.settleApp();
       final step = find
           .ancestor(
             of: find.byTooltip(tText(lang, 'templateLess')),
@@ -571,7 +577,7 @@ void main() {
       await capture(t, name);
       await tap(t, find.text(tText(lang, 'addFood')));
       t.view.viewInsets = const FakeViewPadding(bottom: 250);
-      await t.pumpAndSettle();
+      await t.settleApp();
       await t.enterText(
         find.descendant(
           of: find.byType(AlertDialog).last,
@@ -579,7 +585,7 @@ void main() {
         ),
         '水果 苹果',
       );
-      await t.pumpAndSettle();
+      await t.settleApp();
       expect(find.byType(FoodListItem), findsWidgets);
       expect(
         find.descendant(
@@ -588,9 +594,9 @@ void main() {
         ),
         findsOneWidget,
       );
-      final expectedAppleIds = (await db.searchFoods('水果 苹果'))
-          .map((f) => f.id)
-          .toSet();
+      final expectedAppleIds = ((await t.runAsync(
+        () => db.searchFoods('水果 苹果'),
+      ))!).map((f) => f.id).toSet();
       expect(expectedAppleIds.length, greaterThan(1));
       for (final widget in t.widgetList<FoodListItem>(
         find.byType(FoodListItem),
@@ -607,7 +613,7 @@ void main() {
         ),
       );
       t.view.resetViewInsets();
-      await t.pumpAndSettle();
+      await t.settleApp();
       await tap(t, find.text(tText(lang, 'cancel')));
       expect(await db.allTemplates(), isEmpty);
       await drain(t);

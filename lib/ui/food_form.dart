@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +10,7 @@ import '../logic/food_category.dart';
 import '../logic/i18n.dart';
 import '../logic/providers.dart';
 import 'widgets/food_list_item.dart';
+import 'widgets/food_search_failure.dart';
 import 'widgets/food_category_filter.dart';
 
 double? _p(String s) => double.tryParse(s.trim());
@@ -320,9 +323,47 @@ class _FoodSearchState extends ConsumerState<_FoodSearch> {
   final _search = TextEditingController();
   FoodCategory? _category;
   bool _favoritesOnly = false;
+  String _query = '';
+  Timer? _debounce;
+  AppDatabase? _streamDb;
+  String? _streamQuery;
+  bool? _streamFavorites;
+  Stream<List<Food>>? _stream;
+
+  Stream<List<Food>> _watch(AppDatabase db) {
+    if (_stream == null ||
+        !identical(db, _streamDb) ||
+        _streamQuery != _query ||
+        _streamFavorites != _favoritesOnly) {
+      _streamDb = db;
+      _streamQuery = _query;
+      _streamFavorites = _favoritesOnly;
+      _stream = db.watchFoods(_query, favoritesOnly: _favoritesOnly);
+    }
+    return _stream!;
+  }
+
+  void _edit(String value) {
+    _debounce?.cancel();
+    if (value.isEmpty) {
+      setState(() => _query = value);
+    } else {
+      setState(() {});
+      _debounce = Timer(const Duration(milliseconds: 120), () {
+        if (mounted) setState(() => _query = value);
+      });
+    }
+  }
+
+  void _clear() {
+    _debounce?.cancel();
+    _search.clear();
+    _query = '';
+  }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _search.dispose();
     super.dispose();
   }
@@ -358,11 +399,11 @@ class _FoodSearchState extends ConsumerState<_FoodSearch> {
                     ? null
                     : IconButton(
                         tooltip: tr(context, 'clearSearch'),
-                        onPressed: () => setState(_search.clear),
+                        onPressed: () => setState(_clear),
                         icon: const Icon(Icons.close),
                       ),
               ),
-              onChanged: (_) => setState(() {}),
+              onChanged: _edit,
             ),
             const SizedBox(height: 8),
             FoodCategoryFilter(
@@ -373,20 +414,17 @@ class _FoodSearchState extends ConsumerState<_FoodSearch> {
             SizedBox(
               height: (available - 450).clamp(160.0, 420.0),
               child: StreamBuilder<List<Food>>(
-                stream: db.watchFoods(
-                  _search.text,
-                  favoritesOnly: _favoritesOnly,
-                ),
+                stream: _watch(db),
                 builder: (context, snap) {
                   if (snap.hasError) {
-                    return Center(
-                      child: TextButton(
-                        onPressed: () => setState(() {}),
-                        child: Text(tr(context, 'retry')),
-                      ),
+                    return FoodSearchFailureView(
+                      error: snap.error,
+                      onRetry: () => setState(() => _stream = null),
                     );
                   }
-                  if (!snap.hasData) {
+                  if (!snap.hasData ||
+                      snap.connectionState == ConnectionState.waiting ||
+                      _search.text != _query) {
                     return const Center(child: CircularProgressIndicator());
                   }
                   final list = snap.data!
@@ -428,7 +466,7 @@ class _FoodSearchState extends ConsumerState<_FoodSearch> {
                                     Text(tr(context, 'noMatchShort')),
                                     TextButton(
                                       onPressed: () => setState(() {
-                                        _search.clear();
+                                        _clear();
                                         _category = null;
                                         _favoritesOnly = false;
                                       }),

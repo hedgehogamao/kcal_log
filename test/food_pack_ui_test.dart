@@ -1,3 +1,5 @@
+import 'support/settle_app.dart';
+
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -128,9 +130,9 @@ void main() {
         ),
       ),
     );
-    await t.pumpAndSettle();
+    await t.settleApp();
     await t.tap(find.byKey(const ValueKey('food-pack-open')));
-    await t.pumpAndSettle();
+    await t.settleApp();
     expect(find.byType(FoodPacksPage), findsOneWidget);
   }
 
@@ -138,7 +140,7 @@ void main() {
     final control = find.byKey(const ValueKey('food-pack-pick'));
     await t.ensureVisible(control);
     await t.tap(control);
-    await t.pumpAndSettle();
+    await t.settleApp();
   }
 
   for (final lang in AppLang.values) {
@@ -151,19 +153,21 @@ void main() {
         expect(find.byType(AlertDialog), findsOneWidget);
         expect(await db.foodCount(), 1000);
         await t.tap(find.text(tText(lang, 'cancel')));
-        await t.pumpAndSettle();
+        await t.settleApp();
         expect(await db.foodCount(), 1000);
         await pick(t);
         await t.tap(find.byKey(const ValueKey('food-pack-apply')));
-        await t.pumpAndSettle();
+        await t.settleApp();
         expect(await db.foodCount(), 1001);
-        final first = (await db.searchFoods('食物包测试食物')).single;
+        final first = ((await t.runAsync(() => db.searchFoods('食物包测试食物')))!)
+            .single;
         expect(first.kcal100, 100);
         picker.file(data(2, kcal: 120));
         await pick(t);
         await t.tap(find.byKey(const ValueKey('food-pack-apply')));
-        await t.pumpAndSettle();
-        final second = (await db.searchFoods('食物包测试食物')).single;
+        await t.settleApp();
+        final second = ((await t.runAsync(() => db.searchFoods('食物包测试食物')))!)
+            .single;
         expect(second.id, first.id);
         expect(second.kcal100, 120);
         expect(await db.foodCount(), 1001);
@@ -182,11 +186,11 @@ void main() {
               .writeAsBytesSync(bytes!.buffer.asUint8List());
         }
         await t.pageBack();
-        await t.pumpAndSettle();
+        await t.settleApp();
         // Data-pack foods are visible in the normal All list, not just in SQLite.
         final input = find.byType(TextField).first;
         await t.enterText(input, '食物包测试食物');
-        await t.pumpAndSettle();
+        await t.settleApp();
         expect(
           find.descendant(
             of: find.byType(FoodListItem),
@@ -211,20 +215,20 @@ void main() {
       expect(find.byType(AlertDialog), findsOneWidget);
       expect(await db.foodCount(), 1000);
       await t.tap(find.text(tText(AppLang.zh, 'cancel')));
-      await t.pumpAndSettle();
+      await t.settleApp();
       expect(await db.foodCount(), 1000);
       await pick(t);
       await t.tap(find.byKey(const ValueKey('food-pack-apply')));
-      await t.pumpAndSettle();
+      await t.settleApp();
       expect(await db.foodCount(), 5000);
       expect((await db.select(db.foodCatalogs).get()).single.revision, 3);
       await pick(t);
       expect(find.byType(AlertDialog), findsNothing);
       expect(find.text(tText(AppLang.zh, 'packCurrent')), findsOneWidget);
       await t.pageBack();
-      await t.pumpAndSettle();
+      await t.settleApp();
       await t.enterText(find.byType(TextField).first, newName);
-      await t.pumpAndSettle();
+      await t.settleApp();
       expect(
         find.descendant(
           of: find.byType(FoodListItem),

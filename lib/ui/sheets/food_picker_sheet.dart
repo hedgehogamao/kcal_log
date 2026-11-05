@@ -17,6 +17,7 @@ import '../theme.dart';
 import '../widgets/filter_pills.dart';
 import '../widgets/food_category_filter.dart';
 import '../widgets/food_list_item.dart';
+import '../widgets/food_search_failure.dart';
 import 'entry_sheet.dart';
 
 /// 添加记录入口：食物库搜索 / 最近 / 收藏 / 组合餐 / OFF 在线 / 条码 / 快速添加
@@ -53,6 +54,26 @@ class _FoodPickerSheetState extends ConsumerState<FoodPickerSheet> {
   FoodCategory? _category;
   final _queryCtrl = TextEditingController();
   Timer? _debounce;
+  Timer? _localDebounce;
+  String _localQuery = '';
+  AppDatabase? _streamDb;
+  String? _streamQuery;
+  bool? _streamFavorites;
+  Stream<List<Food>>? _localStream;
+  Stream<List<Food>> _watchLocal(AppDatabase db) {
+    final favorites = _mode != _Mode.all;
+    if (_localStream == null ||
+        !identical(db, _streamDb) ||
+        _localQuery != _streamQuery ||
+        favorites != _streamFavorites) {
+      _streamDb = db;
+      _streamQuery = _localQuery;
+      _streamFavorites = favorites;
+      _localStream = db.watchFoods(_localQuery, favoritesOnly: favorites);
+    }
+    return _localStream!;
+  }
+
   bool _online = false;
   Future<List<OffFood>>? _onlineFuture;
   List<Food>? _recentFoods;
@@ -70,6 +91,7 @@ class _FoodPickerSheetState extends ConsumerState<FoodPickerSheet> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _localDebounce?.cancel();
     _queryCtrl.dispose();
     super.dispose();
   }
@@ -132,6 +154,14 @@ class _FoodPickerSheetState extends ConsumerState<FoodPickerSheet> {
   }
 
   void _onQuery(String v) {
+    _localDebounce?.cancel();
+    if (v.isEmpty) {
+      _localQuery = '';
+    } else {
+      _localDebounce = Timer(const Duration(milliseconds: 120), () {
+        if (mounted) setState(() => _localQuery = v);
+      });
+    }
     setState(() {
       if (v.trim().isNotEmpty && _mode == _Mode.recent) _mode = _Mode.all;
     });
@@ -345,6 +375,8 @@ class _FoodPickerSheetState extends ConsumerState<FoodPickerSheet> {
     final food = await showFoodForm(context, initialCategory: _category);
     if (food == null || !mounted) return;
     _debounce?.cancel();
+    _localDebounce?.cancel();
+    _localQuery = food.name;
     _queryCtrl.text = food.name;
     setState(() {
       _mode = _Mode.all;
@@ -385,9 +417,7 @@ class _FoodPickerSheetState extends ConsumerState<FoodPickerSheet> {
   Widget build(BuildContext context) {
     final db = ref.watch(dbProvider);
     final templates = ref.watch(templatesProvider).valueOrNull ?? const [];
-    final localStream = _mode == _Mode.all
-        ? db.watchFoods(_queryCtrl.text)
-        : db.watchFoods(_queryCtrl.text, favoritesOnly: true);
+    final localStream = _watchLocal(db);
 
     return Column(
       children: [
@@ -578,6 +608,16 @@ class _FoodPickerSheetState extends ConsumerState<FoodPickerSheet> {
               : StreamBuilder<List<Food>>(
                   stream: localStream,
                   builder: (context, snap) {
+                    if (snap.hasError) {
+                      return FoodSearchFailureView(
+                        error: snap.error,
+                        onRetry: () => setState(() => _localStream = null),
+                      );
+                    }
+                    if (snap.connectionState == ConnectionState.waiting ||
+                        _queryCtrl.text != _localQuery) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
                     final list = (snap.data ?? const <Food>[])
                         .where(
                           (food) =>

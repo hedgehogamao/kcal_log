@@ -87,3 +87,13 @@ flutter build windows --release      # Windows（需 Windows + Visual Studio）
 - Snapshots cover all eight database tables, including food-pack ownership, history and profile goals, not appearance preferences. They are local, unencrypted files in the app support directory and do not replace a secure external backup.
 - Restore previews compare added/changed/removed primary-key rows. Cancel does not import. Confirmation requires acknowledgment; changed data or a changed backup requires a new preview. A current-data safety snapshot must succeed before the database restore transaction commits. Write or import failure leaves current database data intact.
 - This iteration is local source only: no new installation, GitHub publication, version bump or changes to the independent 1000/5000-food data packs.
+
+
+### 搜索与滚动响应性加固
+
+- 食物库、选食面板和组合餐选食弹窗采用 120 ms 本地输入合并，清空立即生效。等待新结果时隐藏旧结果，避免误选。
+- 大列表排序在常驻独立 isolate 运行，保留名称、分类、拼音和近似匹配的原有排序规则；至多一个执行中任务、8 个排队任务。同一订阅只保留最新排队请求；离开页面取消投递。
+- 查询上限 256 字符；超长或失败有明确提示与重试，不静默截断、不删除数据库。worker 启动/执行分别有 4/8 秒超时；失败后下次查询重建。
+- 页面复用数据库结果流及筛选结果，选择食物不重复扫描全库。列表中间原尺寸条目避免不必要的变换图层；边缘缩放和滑动管理栏保持。
+- 规范化/拼音缓存分别受条数与 2 Mi 字符总量约束，超长文本不进入缓存。该字符预算不等于整个进程的内存上限。
+- 测试使用内存数据库与独立 profile App，不读写个人饮食记录。基准值取决于机器和负载，不能证明永不卡顿或永不崩溃；Windows 本轮未实机验证。

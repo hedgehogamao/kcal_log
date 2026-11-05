@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -12,6 +14,7 @@ import '../food_form.dart';
 import '../sheets/entry_sheet.dart';
 import '../theme.dart';
 import '../widgets/food_list_item.dart';
+import '../widgets/food_search_failure.dart';
 import '../widgets/filter_pills.dart';
 import '../widgets/food_category_filter.dart';
 import '../widgets/top_tabs.dart';
@@ -93,6 +96,53 @@ class _FoodsTabState extends ConsumerState<_FoodsTab> {
   late final TextEditingController _searchCtrl;
   final ScrollController _managementScroll = ScrollController();
   int? _selectedFoodId;
+  Timer? _queryDebounce;
+  AppDatabase? _streamDb;
+  String? _streamQuery;
+  Stream<List<Food>>? _foodStream;
+  Object? _discoveryKey;
+  List<Food> _discoveryRows = const [];
+  Stream<List<Food>> _watchFoods(AppDatabase db) {
+    if (_foodStream == null ||
+        !identical(db, _streamDb) ||
+        _streamQuery != widget.query) {
+      _streamDb = db;
+      _streamQuery = widget.query;
+      _foodStream = db.watchFoods(widget.query);
+    }
+    return _foodStream!;
+  }
+
+  List<Food> _discover(List<Food> rows) {
+    final key = (rows, _category, _source, _nutrition, _sort);
+    if (key != _discoveryKey) {
+      _discoveryKey = key;
+      _discoveryRows = discoverFoods(
+        rows.where(_match),
+        filter: _nutrition,
+        sort: _sort,
+      );
+    }
+    return _discoveryRows;
+  }
+
+  void _commitQuery(String value) {
+    _queryDebounce?.cancel();
+    _queryDebounce = null;
+    widget.onQuery(value);
+  }
+
+  void _editQuery(String value) {
+    _queryDebounce?.cancel();
+    if (value.isEmpty) {
+      _commitQuery(value);
+    } else {
+      _queryDebounce = Timer(const Duration(milliseconds: 120), () {
+        if (mounted) _commitQuery(value);
+      });
+    }
+    setState(() {});
+  }
 
   @override
   void initState() {
@@ -102,6 +152,7 @@ class _FoodsTabState extends ConsumerState<_FoodsTab> {
 
   @override
   void dispose() {
+    _queryDebounce?.cancel();
     _searchCtrl.dispose();
     _managementScroll.dispose();
     super.dispose();
@@ -127,7 +178,7 @@ class _FoodsTabState extends ConsumerState<_FoodsTab> {
     final food = await showFoodForm(context, initialCategory: _category);
     if (food == null || !mounted) return;
     _searchCtrl.text = food.name;
-    widget.onQuery(food.name);
+    _commitQuery(food.name);
     setState(() {
       _source = FoodSourceFilter.custom;
       _category = FoodCategory.fromCode(food.category);
@@ -195,10 +246,7 @@ class _FoodsTabState extends ConsumerState<_FoodsTab> {
                           Expanded(
                             child: TextField(
                               controller: _searchCtrl,
-                              onChanged: (value) {
-                                widget.onQuery(value);
-                                setState(() {});
-                              },
+                              onChanged: _editQuery,
                               decoration: InputDecoration(
                                 prefixIcon: const Icon(Icons.search),
                                 hintText: tr(context, 'searchName'),
@@ -212,7 +260,7 @@ class _FoodsTabState extends ConsumerState<_FoodsTab> {
                                         icon: const Icon(Icons.close, size: 18),
                                         onPressed: () {
                                           _searchCtrl.clear();
-                                          widget.onQuery('');
+                                          _commitQuery('');
                                           setState(() {});
                                         },
                                       ),
@@ -336,16 +384,20 @@ class _FoodsTabState extends ConsumerState<_FoodsTab> {
             ),
           ],
           body: StreamBuilder<List<Food>>(
-            stream: db.watchFoods(widget.query),
+            stream: _watchFoods(db),
             builder: (context, snap) {
-              if (!snap.hasData) {
+              if (snap.hasError) {
+                return FoodSearchFailureView(
+                  error: snap.error,
+                  onRetry: () => setState(() => _foodStream = null),
+                );
+              }
+              if (!snap.hasData ||
+                  snap.connectionState == ConnectionState.waiting ||
+                  _searchCtrl.text != widget.query) {
                 return const Center(child: CircularProgressIndicator());
               }
-              final list = discoverFoods(
-                snap.data!.where(_match),
-                filter: _nutrition,
-                sort: _sort,
-              );
+              final list = _discover(snap.data!);
               if (list.isEmpty) {
                 return Center(
                   child: SingleChildScrollView(
@@ -372,7 +424,7 @@ class _FoodsTabState extends ConsumerState<_FoodsTab> {
                           TextButton.icon(
                             onPressed: () {
                               _searchCtrl.clear();
-                              widget.onQuery('');
+                              _commitQuery('');
                               setState(() {
                                 _source = FoodSourceFilter.all;
                                 _category = null;

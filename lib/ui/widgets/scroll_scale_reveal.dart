@@ -56,6 +56,7 @@ class RenderScrollScaleReveal extends RenderProxyBox {
   set enabled(bool value) {
     if (value == _enabled) return;
     _enabled = value;
+    markNeedsCompositingBitsUpdate();
     markNeedsPaint();
     markNeedsSemanticsUpdate();
   }
@@ -98,7 +99,10 @@ class RenderScrollScaleReveal extends RenderProxyBox {
   }
 
   Matrix4 get _paintTransform {
-    final s = scale;
+    return _transformFor(scale);
+  }
+
+  Matrix4 _transformFor(double s) {
     return Matrix4.identity()
       ..translateByDouble(size.width / 2, size.height / 2, 0, 1)
       ..scaleByDouble(s, s, 1, 1)
@@ -106,14 +110,20 @@ class RenderScrollScaleReveal extends RenderProxyBox {
   }
 
   @override
-  bool get alwaysNeedsCompositing => child != null;
+  bool get alwaysNeedsCompositing => _enabled && child != null;
   @override
   void paint(PaintingContext context, Offset offset) {
     if (child == null) return;
+    final factor = scale;
+    if (factor == 1) {
+      layer = null;
+      super.paint(context, offset);
+      return;
+    }
     layer = context.pushTransform(
       needsCompositing,
       offset,
-      _paintTransform,
+      _transformFor(factor),
       super.paint,
       oldLayer: layer is TransformLayer ? layer! as TransformLayer : null,
     );

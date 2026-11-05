@@ -48,6 +48,16 @@ class LangScope extends InheritedWidget {
 
 /// 文案表：(English, Español, 中文)
 const Map<String, (String, String, String)> kStrings = {
+  'searchUnavailable': (
+    'Food search could not finish. Your saved records are not changed by this search. Retry or shorten the query.',
+    'No se pudo completar la búsqueda. No cambia tus registros. Reintenta o acorta la consulta.',
+    '食物查询暂时失败，本次查询不会修改已有记录。请重试或缩短搜索内容。',
+  ),
+  'searchTooLong': (
+    'Search is limited to 256 characters. Shorten the query.',
+    'La búsqueda admite hasta 256 caracteres. Acorta la consulta.',
+    '搜索最多支持 256 个字符，请缩短内容。',
+  ),
   'search2Help': (
     'Pinyin / initials supported · check approximate suggestions and raw/cooked state',
     'Admite pinyin e iniciales · confirma coincidencias aproximadas y estado crudo/cocido',

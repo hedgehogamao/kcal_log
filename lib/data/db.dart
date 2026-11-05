@@ -1,7 +1,9 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
-import '../logic/food_search.dart';
+import '../logic/food_search_worker.dart';
 
 part 'db.g.dart';
 
@@ -129,6 +131,13 @@ class AppDatabase extends _$AppDatabase {
 
   AppDatabase.forTesting(super.e);
 
+  final FoodSearchWorker _foodSearch = FoodSearchWorker();
+  @override
+  Future<void> close() async {
+    _foodSearch.dispose();
+    await super.close();
+  }
+
   @override
   int get schemaVersion => 3;
 
@@ -221,51 +230,74 @@ class AppDatabase extends _$AppDatabase {
   Stream<List<Food>> watchFoods(String query, {bool favoritesOnly = false}) {
     final q = select(foods);
     if (favoritesOnly) q.where((f) => f.favorite.equals(true));
-    return q.watch().map((rows) => _rankFoods(rows, query));
+    final owner = Object();
+    var generation = 0;
+    var cancelled = false;
+    StreamSubscription<List<Food>>? subscription;
+    late StreamController<List<Food>> controller;
+    controller = StreamController<List<Food>>(
+      onListen: () {
+        subscription = q.watch().listen(
+          (rows) {
+            final current = ++generation;
+            _rankFoods(rows, query, owner: owner).then(
+              (results) {
+                if (!cancelled && generation == current) {
+                  controller.add(results);
+                }
+              },
+              onError: (Object error, StackTrace stack) {
+                if (!cancelled &&
+                    generation == current &&
+                    error is! FoodSearchCancelled) {
+                  controller.addError(error, stack);
+                }
+              },
+            );
+          },
+          onError: (Object error, StackTrace stack) {
+            if (!cancelled) controller.addError(error, stack);
+          },
+          onDone: () {
+            if (!cancelled) controller.close();
+          },
+        );
+      },
+      onCancel: () async {
+        cancelled = true;
+        generation++;
+        _foodSearch.cancelOwner(owner);
+        await subscription?.cancel();
+      },
+    );
+    return controller.stream;
   }
 
   Future<List<Food>> searchFoods(String query, {int limit = 30}) async {
     if (limit <= 0) return [];
     final rows = await select(foods).get();
-    return _rankFoods(rows, query).take(limit).toList();
+    return (await _rankFoods(rows, query)).take(limit).toList();
   }
 
-  List<Food> _rankFoods(List<Food> rows, String query) {
-    final searching = query.trim().isNotEmpty;
-    final matches = <(Food, int)>[];
-    for (final food in rows) {
-      final rank = foodMatchRank(
-        name: food.name,
-        brand: food.brand,
-        barcode: food.barcode,
-        category: food.category,
-        query: query,
-      );
-      if (rank != null) matches.add((food, rank));
-    }
-    int group(Food food) => food.favorite
-        ? 0
-        : food.source == 'custom'
-        ? 1
-        : food.source == 'builtin'
-        ? 2
-        : 3;
-    matches.sort((a, b) {
-      if (searching) {
-        final byRank = a.$2.compareTo(b.$2);
-        if (byRank != 0) return byRank;
-      }
-      final byGroup = group(a.$1).compareTo(group(b.$1));
-      if (byGroup != 0) return byGroup;
-      if (searching) {
-        final byLength = a.$1.name.length.compareTo(b.$1.name.length);
-        if (byLength != 0) return byLength;
-      }
-      return a.$1.source == 'builtin'
-          ? a.$1.id.compareTo(b.$1.id)
-          : b.$1.id.compareTo(a.$1.id);
-    });
-    return [for (final (food, _) in matches) food];
+  Future<List<Food>> _rankFoods(
+    List<Food> rows,
+    String query, {
+    Object? owner,
+  }) async {
+    final records = [
+      for (final f in rows)
+        FoodSearchRecord(
+          f.name,
+          f.brand,
+          f.barcode,
+          f.category,
+          f.source,
+          f.favorite,
+          f.id,
+        ),
+    ];
+    final order = await _foodSearch.rank(records, query, owner: owner);
+    return [for (final i in order) rows[i]];
   }
 
   Future<Food?> foodByBarcode(String code) =>

@@ -1,3 +1,5 @@
+import 'support/settle_app.dart';
+
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -117,7 +119,7 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(
       MediaQuery.textScalerOf(tester.element(find.byType(TodayPage))).scale(10),
       scale * 10,
@@ -153,7 +155,7 @@ void main() {
     } else {
       await tester.ensureVisible(finder);
     }
-    await tester.pumpAndSettle();
+    await tester.settleApp();
   }
 
   testWidgets('完整应用首页：热量明确、计算说明不会隐藏总览', (tester) async {
@@ -163,10 +165,10 @@ void main() {
     await capture(tester, 'today_redesign_latest');
     final help = find.byKey(const ValueKey('today-calculation-help'));
     await tester.tap(help);
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.text('数字是怎么算的'), findsOneWidget);
     await tester.tap(find.text('关闭'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.text('1568 kcal'), findsOneWidget);
     expect(find.byType(TodayPage), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -175,37 +177,37 @@ void main() {
   testWidgets('历史日期与选中餐次贯穿分类搜索到份量确认', (tester) async {
     await open(tester);
     await tester.tap(find.byKey(const ValueKey('today-previous-day')));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     final yesterday = dateKey(DateTime.now().subtract(const Duration(days: 1)));
     expect(find.byKey(const ValueKey('today-back-to-now')), findsOneWidget);
     final node = find.byKey(const ValueKey('meal-node-dinner'));
     await reveal(tester, node);
     await tester.tap(node);
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     final add = find.byKey(const ValueKey('meal-progress-add'));
     await reveal(tester, add);
     await tester.tap(add);
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     final picker = tester.widget<FoodPickerSheet>(find.byType(FoodPickerSheet));
     expect(picker.date, yesterday);
     expect(picker.meal, MealType.dinner);
     await tester.enterText(find.byType(TextField).first, '水果 苹果');
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     final apple = find.byWidgetPredicate(
       (w) => w is FoodListItem && w.food.name == '苹果',
     );
     expect(apple, findsOneWidget);
     await tester.tap(apple);
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(tester.widget<EntrySheet>(find.byType(EntrySheet)).date, yesterday);
     expect(
       tester.widget<EntrySheet>(find.byType(EntrySheet)).meal,
       MealType.dinner,
     );
     await tester.enterText(find.byType(TextField).last, '200');
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     await tester.tap(find.text('确认记录'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     final rows = await entriesFor(yesterday);
     expect(rows, hasLength(1));
     expect(rows.single.name, '苹果');
@@ -216,12 +218,12 @@ void main() {
     // Picker remains available for another food; dismiss it before returning to today.
     if (find.byType(FoodPickerSheet).evaluate().isNotEmpty) {
       tester.state<NavigatorState>(find.byType(Navigator)).pop();
-      await tester.pumpAndSettle();
+      await tester.settleApp();
     }
     final back = find.byKey(const ValueKey('today-back-to-now'));
     await reveal(tester, back, reverse: true);
     await tester.tap(back);
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.byKey(const ValueKey('today-back-to-now')), findsNothing);
     await reveal(
       tester,
@@ -240,16 +242,16 @@ void main() {
   testWidgets('饮水加减只影响正在查看的日期，历史日可回到今天', (tester) async {
     await open(tester);
     await tester.tap(find.byKey(const ValueKey('today-previous-day')));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     final yesterday = dateKey(DateTime.now().subtract(const Duration(days: 1)));
     final add = find.byKey(const ValueKey('today-water-add'));
     await reveal(tester, add);
     await tester.tap(add);
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect((await waterFor(yesterday))!.ml, 250);
     final remove = find.byKey(const ValueKey('today-water-remove'));
     await tester.tap(remove);
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect((await waterFor(yesterday))!.ml, 0);
     expect((await waterFor(today))!.ml, 750);
     expect(tester.widget<OutlinedButton>(remove).onPressed, isNull);
@@ -264,22 +266,22 @@ void main() {
     await tester.tap(
       find.descendant(of: row, matching: find.byType(InkWell)).first,
     );
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(find.byType(EntrySheet), findsOneWidget);
     await tester.enterText(find.byType(TextField).first, '100');
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     await tester.tap(find.text('保存修改'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     final edited = (await entriesFor(today)).single;
     expect(edited.id, original.id);
     expect(edited.kcal, 116);
     expect(edited.grams, 100);
     await reveal(tester, row);
     await tester.drag(row, const Offset(-600, 0));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     expect(await entriesFor(today), isEmpty);
     await tester.tap(find.text('撤销'));
-    await tester.pumpAndSettle();
+    await tester.settleApp();
     final restored = (await entriesFor(today)).single;
     expect(restored.name, edited.name);
     expect(restored.kcal, edited.kcal);

@@ -1,6 +1,8 @@
 import 'pinyin_data.dart';
 
 final _normalizedCache = <String, String>{};
+var _normalizedCacheChars = 0;
+const _cacheCharBudget = 2 * 1024 * 1024;
 final _hanText = RegExp(r'[\u3400-\u9fff]');
 final _latinOnly = RegExp(r'^[a-z]+$');
 final _hanOnly = RegExp(r'^[\u3400-\u9fff]+$');
@@ -15,10 +17,18 @@ String normalizeFoodSearchText(String text) {
   for (final (variant, canonical) in _synonyms) {
     value = value.replaceAll(variant, canonical);
   }
-  if (_normalizedCache.length >= 16384) {
-    _normalizedCache.remove(_normalizedCache.keys.first);
+  if (text.length <= 512 && value.length <= 512) {
+    final cost = text.length + value.length;
+    while (_normalizedCache.isNotEmpty &&
+        (_normalizedCache.length >= 16384 ||
+            _normalizedCacheChars + cost > _cacheCharBudget)) {
+      final first = _normalizedCache.keys.first;
+      _normalizedCacheChars -=
+          first.length + _normalizedCache.remove(first)!.length;
+    }
+    _normalizedCache[text] = value;
+    _normalizedCacheChars += cost;
   }
-  _normalizedCache[text] = value;
   return value;
 }
 
@@ -241,12 +251,43 @@ FoodSearchMatch? foodSearchMatch({
 }
 
 final _pinyinCache = <String, List<(String, String)>>{};
+var _pinyinCacheChars = 0;
+void _storePinyin(String name, List<(String, String)> result) {
+  final cost =
+      name.length +
+      result.fold<int>(0, (n, k) => n + k.$1.length + k.$2.length);
+  if (name.length > 512 || cost > 8192) return;
+  while (_pinyinCache.isNotEmpty &&
+      (_pinyinCache.length >= 8192 ||
+          _pinyinCacheChars + cost > _cacheCharBudget)) {
+    final first = _pinyinCache.keys.first;
+    final old = _pinyinCache.remove(first)!;
+    _pinyinCacheChars -=
+        first.length +
+        old.fold<int>(0, (n, k) => n + k.$1.length + k.$2.length);
+  }
+  _pinyinCache[name] = result;
+  _pinyinCacheChars += cost;
+}
+
+({
+  int normalizedEntries,
+  int normalizedCharacters,
+  int pinyinEntries,
+  int pinyinCharacters,
+})
+foodSearchCacheFootprint() => (
+  normalizedEntries: _normalizedCache.length,
+  normalizedCharacters: _normalizedCacheChars,
+  pinyinEntries: _pinyinCache.length,
+  pinyinCharacters: _pinyinCacheChars,
+);
+
 List<(String, String)> _keys(String name) {
   final cached = _pinyinCache[name];
   if (cached != null) return cached;
-  if (_pinyinCache.length >= 8192) _pinyinCache.remove(_pinyinCache.keys.first);
   if (!_hanText.hasMatch(name)) {
-    _pinyinCache[name] = const [];
+    _storePinyin(name, const []);
     return const [];
   }
   final variants = {
@@ -258,7 +299,7 @@ List<(String, String)> _keys(String name) {
     for (final v in variants)
       if (_hanText.hasMatch(v)) _transliterate(v),
   ];
-  _pinyinCache[name] = result;
+  _storePinyin(name, result);
   return result;
 }
 
