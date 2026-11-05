@@ -194,3 +194,11 @@
 - 名称与至少一项食物必填，份量须为有限正数且不超过100000克（输入边界，不是营养建议）。无效数字内联修正，保存锁定，失败保留输入并允许重试；编辑取消不写入。
 - 汇总使用设置中的 kcal/kJ。保存仅更新常用组合；记录前显示完整日期、餐次、食物份量和总热量，取消不写入，重复点击确认只执行一次。
 - 组合保存、更新、删除、整餐记录均使用事务；无效份量或缺失食物拒绝整餐，不悄悄漏记其中几项。隔离数据库测试验证第二项插入失败时第一项也不留下。
+
+
+## Search 2.0 and opt-in local snapshots
+
+- Preserve food identity, nutrients and portions. Search-only aliases and Mandarin transliteration do not imply nutritional equivalence. Literal results precede transliteration and labeled one-edit suggestions. Explicit preparation, species and food-form words cannot be corrected away. Numeric barcode queries are not fuzzy.
+- Runtime caches are bounded: 8192 transliterations and 16384 normalized strings. The generated CJK index is a fixed local map, not a growing user dataset.
+- Snapshot storage limits are 14 managed files, 50 MiB total, 8 MiB per file. A checksummed JSON snapshot is written to a temporary file, verified, atomically renamed and only then used for retention cleanup. Other files and links are ignored. Storage is device-local and unencrypted.
+- Restore previews bind both the chosen payload digest and the current database digest, and compare all eight tables by primary key, including packId. A verified current-data safety snapshot is required before the import transaction can commit. The busy state lasts through the final snapshot-list refresh.

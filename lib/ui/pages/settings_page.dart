@@ -18,6 +18,7 @@ import '../dialogs.dart';
 import '../theme.dart';
 import '../widgets/app_segmented.dart';
 import '../widgets/lang_button.dart';
+import '../widgets/auto_backup_panel.dart';
 import 'food_packs_page.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
@@ -351,6 +352,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 title: tr(context, 'secData'),
                 subtitle: tr(context, 'backupHelp'),
                 children: [
+                  const AutoBackupPanel(),
                   _SettingsRow(
                     key: const ValueKey('food-pack-settings'),
                     icon: Icons.inventory_2_outlined,

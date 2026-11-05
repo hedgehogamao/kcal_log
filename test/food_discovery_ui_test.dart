@@ -100,6 +100,13 @@ void main() {
             }
             position.jumpTo(0);
             await t.pumpAndSettle();
+            // Reset the outer management sliver as well as the inner list.
+            // The new library intentionally lets this header scroll off screen.
+            final nested = find.byKey(const ValueKey('food-library-scroll'));
+            if (nested.evaluate().isNotEmpty) {
+              t.state<NestedScrollViewState>(nested).outerController.jumpTo(0);
+              await t.pumpAndSettle();
+            }
             return names.toList();
           }
 

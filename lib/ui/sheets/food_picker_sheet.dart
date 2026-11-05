@@ -646,6 +646,7 @@ class _FoodPickerSheetState extends ConsumerState<FoodPickerSheet> {
                         if (list.isNotEmpty)
                           for (final f in list)
                             _FoodTile(
+                              query: _queryCtrl.text,
                               food: f,
                               onTap: () => showEntrySheet(
                                 context,
@@ -704,6 +705,7 @@ class _FoodPickerSheetState extends ConsumerState<FoodPickerSheet> {
         ),
         for (final f in visible)
           _FoodTile(
+            query: _queryCtrl.text,
             food: f,
             onTap: () => showEntrySheet(
               context,
@@ -795,14 +797,16 @@ class _FoodPickerSheetState extends ConsumerState<FoodPickerSheet> {
 }
 
 class _FoodTile extends ConsumerWidget {
-  const _FoodTile({required this.food, this.onTap});
+  const _FoodTile({required this.food, this.onTap, this.query = ''});
 
   final Food food;
   final VoidCallback? onTap;
+  final String query;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return FoodListItem(
+      query: query,
       food: food,
       onFavorite: () => ref.read(dbProvider).toggleFavorite(food),
       onTap: onTap,

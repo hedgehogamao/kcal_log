@@ -21,7 +21,7 @@
 - 最新独立食物包 **5000 条（修订 3）**：保留原 1000 条及 ID，新增 4000 条可核验 USDA 历史记录；v0.1.2 可直接导入 [common-foods-5000.json](food-packs/common-foods-5000.json)，App 内置仍为 1000 条，版本不变
 - 升级只补充新条目，保护个人修改、收藏、历史记录及已删除条目；数据来源和修订规则见 [food-packs/README.md](food-packs/README.md)
 
-**源码新增（尚未包含在已发布的 v0.1.2 安装包）**
+**Smart food tools included in the published black-gold installers**
 - 桌面宽屏食物库：紧凑列表与右侧份量预览；更换食物会重置份量，确认前不写记录。窄屏保留弹层；营养条件与排序直接显示文字，大字号下名称与能量上下排布。食物详情展示完整名称、已知检索同义词及实际关联的包修订；不猜测生熟，修订关联不保证条目未经个人编辑。
 - 餐次复用：更多操作 → 本餐常吃（选中日期及之前 29 天），近期/常吃可预填最近一次明确克数；可预览后复制前一天某餐或整天，并撤销本次复制。
 - 一句话记餐：今日页输入多个食物及明确克数，例如“午餐 米饭150克 鸡胸肉100克”。本地解析，逐项确认匹配；不猜一碗重量或不存在的营养值。
@@ -77,3 +77,13 @@ flutter build windows --release      # Windows（需 Windows + Visual Studio）
 - 微量营养素面板（OpenNutriTracker 式 10 项维生素/矿物质）
 - 可选 WebDAV/iCloud 文件同步（仍无自建服务器）
 - 断食计时器、AI 拍照识别（需自备 API key）
+
+## Local iteration: Search 2.0 and opt-in automatic backups
+
+- Search supports Mandarin pinyin and initials of at least two letters, regional aliases and explicitly labeled one-edit suggestions. The offline CJK index is reproducible with `tool/build_pinyin_index.swift`; runtime search does not require Swift or a network. Food phrases handle common polyphonic readings. Unknown characters remain searchable literally.
+- Exact names rank before transliteration and approximate suggestions. Barcode digits, raw/cooked state, species and explicit food-form qualifiers are not corrected away. Candidates never change stored names, portions or nutrients and never log food automatically.
+- Automatic backups are OFF by default. While the app is active, startup/resume, actual database updates and a periodic check can trigger snapshots. Changed data is snapshotted at least 15 minutes apart; identical data is skipped within a day. No background daemon is installed.
+- Retention: up to 14 managed snapshots, 50 MiB total, 8 MiB per file. Only service-owned filenames are pruned; other files and symlinks are ignored. Disabling keeps existing snapshots. Back up now is a separate explicit manual action.
+- Snapshots cover all eight database tables, including food-pack ownership, history and profile goals, not appearance preferences. They are local, unencrypted files in the app support directory and do not replace a secure external backup.
+- Restore previews compare added/changed/removed primary-key rows. Cancel does not import. Confirmation requires acknowledgment; changed data or a changed backup requires a new preview. A current-data safety snapshot must succeed before the database restore transaction commits. Write or import failure leaves current database data intact.
+- This iteration is local source only: no new installation, GitHub publication, version bump or changes to the independent 1000/5000-food data packs.

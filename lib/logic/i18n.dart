@@ -48,6 +48,86 @@ class LangScope extends InheritedWidget {
 
 /// 文案表：(English, Español, 中文)
 const Map<String, (String, String, String)> kStrings = {
+  'search2Help': (
+    'Pinyin / initials supported · check approximate suggestions and raw/cooked state',
+    'Admite pinyin e iniciales · confirma coincidencias aproximadas y estado crudo/cocido',
+    '支持拼音／首字母；近似结果请核对食物及生熟',
+  ),
+  'search2Approximate': (
+    'Approximate match · confirm food',
+    'Coincidencia aproximada · confirma',
+    '近似匹配，请核对',
+  ),
+  'autoBackupTitle': (
+    'Automatic local backups',
+    'Copias locales automáticas',
+    '自动本地备份',
+  ),
+  'autoBackupSchedule': (
+    'Off by default. While the app is active: changed data at most every 15 minutes, plus a daily snapshot.',
+    'Desactivado por defecto. Con la app activa: cambios cada 15 minutos como máximo y una copia diaria.',
+    '默认关闭。App 前台运行时，变更备份至少间隔 15 分钟，并保留每日快照。',
+  ),
+  'autoBackupManage': (
+    'Manage local snapshots',
+    'Gestionar copias locales',
+    '管理本地备份',
+  ),
+  'autoBackupLimits': (
+    'Up to 14 snapshots / 50 MiB (8 MiB each). Device-local and unencrypted; keep a secure external copy too. Includes database data, not appearance preferences. Disabling keeps existing snapshots.',
+    'Hasta 14 copias / 50 MiB (8 MiB por copia). Solo local y sin cifrar; guarda una copia externa segura. Incluye datos, no preferencias visuales. Desactivar no borra las copias.',
+    '最多 14 份／50 MiB（每份不超过 8 MiB）。仅保存在本机、未加密，仍建议另存安全的异地副本。包含数据库资料，不含外观偏好；关闭不会删除已有备份。',
+  ),
+  'autoBackupNow': ('Back up now', 'Crear copia ahora', '立即备份'),
+  'autoBackupRefresh': ('Refresh', 'Actualizar', '刷新'),
+  'autoBackupEmpty': (
+    'No local snapshots yet. Nothing is written automatically while disabled.',
+    'Aún no hay copias. Desactivado no escribe copias automáticamente.',
+    '暂无本地备份；关闭时不会自动写入文件。',
+  ),
+  'autoBackupCorrupt': (
+    'Damaged or incompatible · restore disabled',
+    'Dañada o incompatible · no restaurable',
+    '文件损坏或不兼容，不能恢复',
+  ),
+  'autoBackupPreview': (
+    'Preview restore',
+    'Vista previa de restauración',
+    '预览恢复',
+  ),
+  'autoBackupRestoreWarning': (
+    'This replaces database data, not preferences. Current data is backed up first. Nothing changes until you confirm. If data changes after this preview, review again.',
+    'Reemplaza datos, no preferencias. Primero se guarda una copia actual. Nada cambia sin confirmar. Si los datos cambian después, revisa de nuevo.',
+    '恢复会覆盖数据库资料，不改外观偏好；会先备份当前数据。确认前不写入；预览后数据如有变化，必须重新预览。',
+  ),
+  'autoBackupDiffLegend': (
+    'Added / changed / removed compared with current data',
+    'Añadidos / cambiados / eliminados frente a los datos actuales',
+    '与当前数据相比：新增 / 更改 / 移除',
+  ),
+  'autoBackupFailed': (
+    'Backup or restore failed. Check storage and permissions, or preview again.',
+    'Error al copiar o restaurar. Revisa espacio y permisos o la vista previa.',
+    '备份或恢复失败，请检查空间、路径权限，或重新预览。',
+  ),
+  'autoBackupRestored': (
+    'Snapshot restored. Previous data has a safety backup.',
+    'Copia restaurada. Los datos anteriores tienen una copia de seguridad.',
+    '已恢复；恢复前的数据已另存安全备份。',
+  ),
+  'autoTable_foods': ('Foods', 'Alimentos', '食物'),
+  'autoTable_entries': ('Food records', 'Registros', '饮食记录'),
+  'autoTable_weights': ('Weights', 'Pesos', '体重'),
+  'autoTable_waters': ('Water records', 'Agua', '饮水记录'),
+  'autoTable_templates': ('Meal templates', 'Plantillas', '组合餐'),
+  'autoTable_templateItems': ('Template ingredients', 'Ingredientes', '组合餐食材'),
+  'autoTable_foodCatalogs': (
+    'Food pack revisions',
+    'Revisiones de paquetes',
+    '食物包修订',
+  ),
+  'autoTable_profile': ('Profile and goals', 'Perfil y objetivos', '个人资料及目标'),
+
   'foodPacks': ('Food packs', 'Paquetes de alimentos', '食物数据包'),
   'foodSearchAliases': (
     'Search synonyms only',

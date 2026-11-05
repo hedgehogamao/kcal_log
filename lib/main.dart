@@ -8,6 +8,7 @@ import 'logic/providers.dart';
 import 'ui/shell.dart';
 import 'ui/theme.dart';
 import 'ui/widgets/liquid_gold_backdrop.dart';
+import 'ui/widgets/auto_backup_panel.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,7 +44,9 @@ class KcalLogApp extends ConsumerWidget {
       home: const HomeShell(),
       builder: (context, child) => LangScope(
         lang: settings.lang,
-        child: LiquidGoldScene(animate: animateGold, child: child!),
+        child: AutoBackupHost(
+          child: LiquidGoldScene(animate: animateGold, child: child!),
+        ),
       ),
     );
   }

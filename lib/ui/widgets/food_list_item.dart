@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/db.dart';
 import '../../logic/calc.dart';
+import '../../logic/food_search.dart';
 import '../../logic/food_category.dart';
 import '../../logic/i18n.dart';
 import '../theme.dart';
@@ -18,9 +19,11 @@ class FoodListItem extends StatelessWidget {
     this.compact = false,
     this.denseList = false,
     this.selected = false,
+    this.query = '',
   });
 
   final Food food;
+  final String query;
   final VoidCallback? onTap;
   final VoidCallback? onFavorite;
   final Widget? menu;
@@ -42,7 +45,17 @@ class FoodListItem extends StatelessWidget {
       'pack' => tr(context, 'sourceFoodPack'),
       _ => tr(context, 'sourceCustom'),
     };
+    final approximate =
+        foodSearchMatch(
+          name: food.name,
+          query: query,
+          brand: food.brand,
+          barcode: food.barcode,
+          category: food.category,
+        )?.approximate ??
+        false;
     final detail = [
+      if (approximate) tr(context, 'search2Approximate'),
       FoodCategory.fromCode(food.category).label(context),
       source,
       if (food.brand != null && food.brand!.trim().isNotEmpty) food.brand!,
